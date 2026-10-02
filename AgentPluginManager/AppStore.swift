@@ -202,38 +202,49 @@ final class AppStore {
         isScanning = false
     }
 
-    func chooseSkillFolder(agent: SkillAgent, name: String) async {
+    func chooseSkillFolder(agent: SkillAgent, name: String, replacing existing: DiscoveryRoot? = nil) async {
         guard !isScanning else { return }
         let panel = NSOpenPanel()
-        panel.title = "스킬 폴더 추가"
+        panel.title = existing == nil ? "스킬 폴더 추가" : "스킬 경로 수정"
         panel.message = "SKILL.md를 포함한 스킬들이 있는 폴더를 선택하세요. 선택한 폴더만 읽으며 파일을 변경하지 않습니다."
-        panel.prompt = "경로 추가"
+        panel.prompt = existing == nil ? "경로 추가" : "경로 변경"
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        if addRoot(url: url, agent: agent, name: name) { await rescan() }
+        if addRoot(url: url, agent: agent, name: name, replacing: existing) { await rescan() }
     }
 
     @discardableResult
-    func addRoot(url: URL, agent: SkillAgent, name: String) -> Bool {
+    func addRoot(url: URL, agent: SkillAgent, name: String, replacing existing: DiscoveryRoot? = nil) -> Bool {
+        guard !isScanning else { return false }
+        if let existing {
+            guard additionalRoots.contains(where: { $0.id == existing.id }), existing.agent == agent else {
+                settingsMessage = "추가로 등록한 경로만 수정할 수 있습니다."
+                return false
+            }
+        }
         guard url.isFileURL, url.path.hasPrefix("/") else { settingsMessage = "로컬 폴더를 선택해 주세요."; return false }
         let label = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !label.isEmpty, label.count <= 80 else { settingsMessage = "에이전트 이름은 1~80자로 입력해 주세요."; return false }
         let root = DiscoveryRoot(agent: agent, url: url, label: label)
-        guard !registeredRoots.contains(where: { $0.id == root.id }) else {
+        guard !registeredRoots.contains(where: { $0.id == root.id && $0.id != existing?.id }) else {
             settingsMessage = "이 에이전트의 경로는 이미 등록되어 있습니다."
             return false
         }
-        let updated = additionalRoots + [root]
+        let updated = existing == nil ? additionalRoots + [root] : additionalRoots.map { $0.id == existing?.id ? root : $0 }
         guard saveRoots(updated) else { return false }
-        registeredRoots.append(root)
-        settingsMessage = "\(label) 경로를 추가했습니다."
+        registeredRoots = automaticRoots + updated
+        if let existing {
+            if rootFilterID == existing.id { rootFilterID = root.id }
+            if selectedEntry?.rootID == existing.id { selectedEntry = nil }
+        }
+        settingsMessage = existing == nil ? "\(label) 경로를 추가했습니다." : "\(label) 경로를 변경했습니다. 폴더와 파일은 그대로 있습니다."
         return true
     }
 
     func removeRoot(_ root: DiscoveryRoot) async {
-        guard !isScanning, !automaticRoots.contains(root) else { return }
+        guard !isScanning, additionalRoots.contains(where: { $0.id == root.id }) else { return }
         guard saveRoots(additionalRoots.filter { $0.id != root.id }) else { return }
         registeredRoots.removeAll { $0.id == root.id }
         if rootFilterID == root.id { showLibrary() }
