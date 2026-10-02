@@ -2,6 +2,8 @@ import AppKit
 import SwiftUI
 
 enum WorkbenchTheme {
+    static let sidebarText = adaptive(0x202020, 0xEEEEEE)
+    static let sidebarSecondary = adaptive(0x606060, 0xB6B6B6)
     static let surface = adaptive(0xFAFAFA, 0x202020)
     static let raised = adaptive(0xF5F5F5, 0x292929)
     static let selection = adaptive(0xEFEFEF, 0x303030)

@@ -9,7 +9,9 @@ A native macOS app for browsing agent skills and saving the skill selections you
 ## What works today
 
 - Browse skills in `~/.agents/skills` and `~/.claude/skills`, plus folders you register yourself.
-- Search by name or path; filter by agent, folder, or symbolic links.
+- Browse repositories in the source sidebar, with installed-entry counts and an unknown-source section. Search by name, source, or path; combine source, agent, installation location, and symbolic-link filters.
+- Agent and location filters stay in sync: choosing an agent lists only its registered locations; choosing a location selects its agent. Changing agents clears an incompatible location. “All locations” retains the selected agent; “All agents” clears the location. Location choices stay available even when a source or search has no matching skills. Locations are shown only in the top filter; manage paths in Settings.
+- Classify supported global installation receipts automatically, or connect a repository manually in the skill detail view. Manual associations can be edited or removed.
 - View raw `SKILL.md` content and report missing folders, access failures, and incomplete scans.
 - Manage default and additional paths together in Settings. Default paths are fixed; additional paths can be edited or removed without changing their files.
 - Create, edit, and delete work configurations. Import selections from another configuration as a snapshot; later edits to the source do not affect your saved configuration.
@@ -50,20 +52,24 @@ Personal signing settings belong in the ignored `Config/Local.xcconfig`. See [CO
 ## Use it
 
 1. Open Settings (`⌘,`) to check the default skill folders or add a folder containing a `SKILL.md` file or a collection of skills.
-2. Browse the skill list and open an entry to read its source or reveal it in Finder. Refresh with `⌘R` after external changes.
+2. Choose a source in the sidebar, narrow the list by agent or installation location, and open an entry to read `SKILL.md` or reveal it in Finder. Use “출처 연결…” in the detail view for an unknown source. Refresh with `⌘R` after external changes.
 3. Create a work configuration and select skills for that task. Use “다른 구성에서 가져오기” to reuse selections from another configuration. Import is blocked if any source skill is missing from the current catalog.
 
 ## Local data and file access
 
-The app stores work configurations, additional paths, and appearance preferences locally in `UserDefaults`. The current app has no accounts, telemetry, or network requests and does not execute skill scripts.
+The app stores work configurations, manual source associations, additional paths, and appearance preferences locally in `UserDefaults`. The current app has no accounts, telemetry, or network requests and does not execute skill scripts.
 
 The scanner reads registered roots. Raw content is limited to regular UTF-8 files up to 2 MiB; link targets outside registered roots are blocked. Scans are bounded at depth 8 and 10,000 candidates per root and report partial results. These are app limits, not agent specifications.
+
+Source classification reads the optional version-3 [Vercel Skills installation receipt](https://github.com/vercel-labs/skills/blob/main/src/skill-lock.ts) at `~/.agents/.skill-lock.json`. It associates supported GitHub/Git records only with the corresponding real directory under `~/.agents/skills` and registered entries resolving to that directory. Same-name copies in other locations remain unknown. Metadata reads reject symlinks and special files and use the same 2 MiB limit. Alternate `XDG_STATE_HOME` receipt locations, project receipts, and plugin receipts are not currently supported.
+
+“설치 기록” means an installation receipt; “직접 연결” means a local user association. Neither verifies the current files against the remote repository. Counts include separate installed copies and links, not the number of skills available remotely. Manual associations are tied to the discovered installation identity; replacing a directory does not transfer its association. Removing a manual override restores the receipt source if one exists. Source selection and metadata edits do not change work configurations or skill files.
 
 Legacy bundle IDs (`forked.agentskillmanager.local` and `.dev`) are retained to preserve existing settings after the rename. See [Config/Base.xcconfig](Config/Base.xcconfig).
 
 ## Roadmap
 
-- Verify agent-specific discovery rules, provenance, and plugin membership.
+- Extend verified discovery rules, provenance formats, and plugin membership.
 - Add safe skill changes with previews, conflict checks, and recovery before connecting writes to user files.
 - Add plugin installation and updates through verified agent-supported workflows, then support MCP servers, hooks, and instructions where applicable.
 - Complete accessibility and distribution validation.

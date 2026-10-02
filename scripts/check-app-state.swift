@@ -133,6 +133,122 @@ struct AppStateCheck {
         precondition(restored.profileMemberIDs(sourceID) == nil && restored.profiles.first { $0.id == targetID }?.members.count == 2)
         restored.deleteProfile(targetID)
         precondition(AppStore(defaults: defaults, home: home).profiles.isEmpty)
+        try await checkSources()
         print("PASS: profile create/edit/search/reload/delete, missing members preserved, invalid/corrupt state blocked, filters, fixed default paths, additional path edit/delete/reload, import profiles, reject missing members, preserve imported snapshots, no skill file changes")
     }
+
+    @MainActor private static func checkSources() async throws {
+        let files = FileManager.default
+        let home = files.temporaryDirectory.appendingPathComponent("SourceAppCheck-\(UUID().uuidString)")
+        let suite = "SourceAppCheck.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { try? files.removeItem(at: home); defaults.removePersistentDomain(forName: suite) }
+        for path in [".agents/skills/example", ".claude/skills/example", "manual/example"] {
+            let directory = home.appendingPathComponent(path)
+            try files.createDirectory(at: directory, withIntermediateDirectories: true)
+            try "read only".write(to: directory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        }
+        try files.createSymbolicLink(at: home.appendingPathComponent(".claude/skills/shared"), withDestinationURL: home.appendingPathComponent(".agents/skills/example"))
+        let receipt = Data(#"{"version":3,"skills":{"example":{"sourceType":"github","sourceUrl":"https://github.com/Owner/Repo.git"}}}"#.utf8)
+        let lock = home.appendingPathComponent(".agents/.skill-lock.json")
+        try receipt.write(to: lock)
+        let store = AppStore(defaults: defaults, home: home)
+        precondition(store.addRoot(url: home.appendingPathComponent("manual"), agent: .custom, name: "Other"))
+        await store.rescan()
+        precondition(store.entries.count == 4 && store.sourceGroups.count == 1 && store.sourceGroups[0].count == 2)
+        precondition(store.unknownSourceCount == 2)
+        let repo = SourceRepository("Owner/Repo")!
+        precondition(repo.id == SourceRepository("git@github.com:owner/repo.git")?.id)
+        for invalid in ["https://token@github.com/owner/repo", "file:///owner/repo", "https://github.com/owner/repo?token=secret", "https://github.com/owner/../repo", "owner/repo/tree/main"] {
+            precondition(SourceRepository(invalid) == nil)
+        }
+        store.showLibrary(sourceID: repo.id)
+        precondition(store.filteredEntries.count == 2 && store.sourceEntryCount == 2 && store.sourceTitle == "owner/repo")
+        store.agentFilter = .claudeCode
+        store.linksOnly = true
+        precondition(store.filteredEntries.map(\.name) == ["shared"])
+        let codexRoot = store.automaticRoots[0]
+        let claudeRoot = store.automaticRoots[1]
+        precondition(store.availableRoots.map(\.id) == [claudeRoot.id])
+        store.rootFilterID = codexRoot.id
+        precondition(store.agentFilter == .codex && store.availableRoots.map(\.id) == [codexRoot.id])
+        precondition(store.filteredEntries.isEmpty && store.sourceEntryCount == 2)
+        store.linksOnly = false
+        precondition(store.filteredEntries.map(\.id) == [store.entries.first { $0.agent == .codex }!.id])
+        store.agentFilter = .claudeCode
+        precondition(store.rootFilterID == nil && store.filteredEntries.map(\.name) == ["shared"])
+        store.rootFilterID = claudeRoot.id
+        precondition(store.agentFilter == .claudeCode)
+        store.rootFilterID = nil
+        precondition(store.agentFilter == .claudeCode && store.availableRoots.count == 1)
+        store.rootFilterID = claudeRoot.id
+        store.agentFilter = nil
+        precondition(store.rootFilterID == nil && store.availableRoots.count == 3)
+        store.rootFilterID = codexRoot.id
+        store.agentFilter = .codex
+        precondition(store.rootFilterID == codexRoot.id, "Compatible locations stay selected")
+        let empty = home.appendingPathComponent("empty-codex")
+        try files.createDirectory(at: empty, withIntermediateDirectories: true)
+        precondition(store.addRoot(url: empty, agent: .codex, name: "Codex · additional"))
+        let emptyRoot = DiscoveryRoot(agent: .codex, url: empty, label: "Codex · additional")
+        precondition(store.additionalRoots.contains { $0.id == emptyRoot.id })
+        store.rootFilterID = emptyRoot.id
+        store.search = "owner/repo"
+        await store.rescan()
+        precondition(store.filteredEntries.isEmpty && store.agentFilter == .codex && store.rootFilterID == emptyRoot.id)
+        precondition(store.availableRoots.count == 2, "All matching registered paths remain choices even without results")
+        await store.removeRoot(emptyRoot)
+        precondition(store.rootFilterID == nil && store.agentFilter == .codex && store.sourceFilterID == repo.id && store.search == "owner/repo")
+        store.showLibrary(rootID: claudeRoot.id, sourceID: repo.id)
+        precondition(store.agentFilter == .claudeCode && store.filteredEntries.map(\.name) == ["shared"])
+        store.rootFilterID = "unregistered-location"
+        precondition(store.rootFilterID == nil && store.agentFilter == .claudeCode)
+        store.resetFilters()
+        precondition(store.sourceFilterID == repo.id && store.filteredEntries.count == 2)
+        store.search = "owner/repo"
+        precondition(store.filteredEntries.count == 2)
+        let copy = store.entries.first { $0.agent == .custom }!
+        precondition(store.sourceRepository(for: copy) == nil, "Same names are not provenance")
+        precondition(!store.saveSource(for: copy, input: "https://user:password@example.com/a/b"))
+        precondition(store.saveSource(for: copy, input: "owner/repo"))
+        precondition(store.sourceEvidence(for: copy) == "직접 연결" && store.sourceGroups[0].count == 3)
+        let profileID = UUID()
+        precondition(store.saveProfile(id: profileID, name: "Independent", note: "", memberIDs: [copy.id]))
+        let restored = AppStore(defaults: defaults, home: home)
+        await restored.rescan()
+        precondition(restored.sourceRepository(for: copy) == repo && restored.profiles.first?.members.count == 1)
+        let installed = restored.entries.first { $0.agent == .codex }!
+        precondition(restored.saveSource(for: installed, input: "another/repo"))
+        precondition(restored.sourceEvidence(for: installed) == "직접 연결")
+        precondition(restored.saveSource(for: installed, input: nil) && restored.sourceRepository(for: installed) == repo)
+        precondition(restored.sourceEvidence(for: installed) == "설치 기록")
+        restored.showLibrary(sourceID: AppStore.unknownSourceID)
+        precondition(restored.filteredEntries.count == 1)
+        restored.page = .profiles
+        precondition(restored.sourceFilterID == nil && restored.profiles.first?.members.count == 1)
+        try files.moveItem(at: copy.url, to: home.appendingPathComponent("held"))
+        try files.createDirectory(at: copy.url, withIntermediateDirectories: true)
+        try "replacement".write(to: copy.url.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        await restored.rescan()
+        let replacement = restored.entries.first { $0.agent == .custom }!
+        precondition(replacement.id != copy.id && restored.sourceRepository(for: replacement) == nil)
+        precondition(!restored.saveSource(for: copy, input: "another/repo"))
+        let corrupt = Data("invalid JSON".utf8)
+        defaults.set(corrupt, forKey: "skillSources")
+        let blocked = AppStore(defaults: defaults, home: home)
+        await blocked.rescan()
+        precondition(blocked.sourcesLoadFailed && !blocked.saveSource(for: replacement, input: "owner/repo"))
+        precondition(defaults.data(forKey: "skillSources") == corrupt)
+        let unchangedReceipt = try Data(contentsOf: lock)
+        precondition(unchangedReceipt == receipt)
+        let unchangedSkill = try String(contentsOf: home.appendingPathComponent("held/SKILL.md"), encoding: .utf8)
+        precondition(unchangedSkill == "read only")
+        let customRoot = restored.additionalRoots.first { $0.agent == .custom }!
+        restored.showLibrary(rootID: customRoot.id, sourceID: repo.id)
+        await restored.removeRoot(customRoot)
+        precondition(restored.rootFilterID == nil && restored.agentFilter == nil && restored.sourceFilterID == repo.id)
+        precondition(!restored.availableAgents.contains(.custom), "Removing the last path removes its agent option without losing the source")
+        print("PASS: receipt provenance, copies/links, source counts/search, linked agent/location filters, multiple/empty paths, root edit/removal, manual override/unlink/reload, independent profiles, replacement identity, credential rejection, corrupt metadata preserved, no source file changes")
+    }
+
 }

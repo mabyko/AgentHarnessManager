@@ -198,11 +198,15 @@ public enum SkillCatalog {
             guard file >= 0 else { throw CatalogReadError.inaccessible("SKILL.md에 접근할 수 없습니다.") }
         }
         defer { close(file) }
+        return try readUTF8(file, name: "SKILL.md")
+    }
+
+    private static func readUTF8(_ file: Int32, name: String) throws -> String {
         var info = stat()
         guard fstat(file, &info) == 0, isType(info, S_IFREG) else {
-            throw CatalogReadError.inaccessible("SKILL.md가 일반 파일이 아닙니다.")
+            throw CatalogReadError.inaccessible("\(name)가 일반 파일이 아닙니다.")
         }
-        guard info.st_size <= documentLimit else { throw CatalogReadError.inaccessible("SKILL.md가 2 MiB 읽기 한도를 넘습니다.") }
+        guard info.st_size <= documentLimit else { throw CatalogReadError.inaccessible("\(name)가 2 MiB 읽기 한도를 넘습니다.") }
         var data = Data()
         var buffer = [UInt8](repeating: 0, count: 16_384)
         while true {
@@ -210,15 +214,61 @@ public enum SkillCatalog {
             if length == 0 { break }
             if length < 0 {
                 if errno == EINTR { continue }
-                throw CatalogReadError.inaccessible("SKILL.md를 읽을 수 없습니다.")
+                throw CatalogReadError.inaccessible("\(name)를 읽을 수 없습니다.")
             }
-            guard data.count + length <= documentLimit else { throw CatalogReadError.inaccessible("SKILL.md가 2 MiB 읽기 한도를 넘습니다.") }
+            guard data.count + length <= documentLimit else { throw CatalogReadError.inaccessible("\(name)가 2 MiB 읽기 한도를 넘습니다.") }
             data.append(contentsOf: buffer.prefix(length))
         }
         guard let document = String(data: data, encoding: .utf8) else {
-            throw CatalogReadError.inaccessible("SKILL.md가 올바른 UTF-8 문서가 아닙니다.")
+            throw CatalogReadError.inaccessible("\(name)가 올바른 UTF-8 문서가 아닙니다.")
         }
         return document
+    }
+
+    /// Only version-3 global installation receipts at the default location are supported.
+    public static func installerSources(entries: [SkillEntry], home: URL) -> InstallerSources {
+        var result = InstallerSources()
+        do {
+            let homePath = try canonical(home.path)
+            let homeFD = try openAbsoluteDirectory(homePath)
+            defer { close(homeFD) }
+            let agents = openat(homeFD, ".agents", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            if agents < 0 && errno == ENOENT { return result }
+            guard agents >= 0 else { throw CatalogReadError.inaccessible("설치 기록 폴더에 접근할 수 없습니다.") }
+            defer { close(agents) }
+            let file = openat(agents, ".skill-lock.json", O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
+            if file < 0 && errno == ENOENT { return result }
+            guard file >= 0 else { throw CatalogReadError.inaccessible("설치 기록에 접근할 수 없습니다.") }
+            defer { close(file) }
+            let text = try readUTF8(file, name: "설치 기록")
+            guard let lock = try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+                  let version = lock["version"] as? Int, version == 3,
+                  let skills = lock["skills"] as? [String: [String: Any]] else {
+                throw CatalogReadError.inaccessible("지원하지 않거나 손상된 설치 기록입니다.")
+            }
+            let skillsFD = openat(agents, "skills", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            guard skillsFD >= 0 else { return result }
+            defer { close(skillsFD) }
+            var byPath: [String: SourceRepository] = [:]
+            for (name, record) in skills {
+                guard !name.isEmpty, name.count <= 255, name != ".", name != "..",
+                      name.utf8.allSatisfy({ (97...122).contains($0) || (48...57).contains($0) || [45, 46, 95].contains($0) }),
+                      let kind = record["sourceType"] as? String, ["github", "git"].contains(kind),
+                      let source = record["sourceUrl"] as? String, let repository = SourceRepository(source) else { continue }
+                let directory = openat(skillsFD, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+                guard directory >= 0 else { continue }
+                close(directory)
+                byPath[homePath + "/.agents/skills/" + name] = repository
+            }
+            for entry in entries where entry.problem == nil {
+                if let path = try? canonical(entry.url.path), let repository = byPath[path] {
+                    result.repositories[entry.id] = repository
+                }
+            }
+        } catch {
+            result.message = "출처 자동 분류를 건너뛰었습니다. \(error.localizedDescription)"
+        }
+        return result
     }
 
     private struct OpenRoot {

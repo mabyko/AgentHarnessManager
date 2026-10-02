@@ -43,7 +43,7 @@
 
 ## 토큰 구조
 
-[tokens.json](design/tokens.json)은 초기 시안 검증용 값입니다. 현재 스타일은 최종 시안의 `design-tokens`를 기준으로 하며 네이티브 커스텀 표면·선택·주의·강조 역할은 `WorkbenchTheme`의 밝은/어두운 적응 색상으로 구현합니다. 기본 글자는 `Color.primary`·`Color.secondary`, 창·도구 막대·컨트롤·사이드바 재료는 시스템 표현을 유지합니다. 시스템 컨트롤 전체를 시안의 HEX 값으로 치환하지 않습니다.
+[tokens.json](design/tokens.json)은 초기 시안 검증용 값입니다. 현재 스타일은 최종 시안의 `design-tokens`를 기준으로 하며 네이티브 커스텀 표면·선택·주의·강조 역할은 `WorkbenchTheme`의 밝은/어두운 적응 색상으로 구현합니다. 기본 글자는 `Color.primary`·`Color.secondary`를 사용하며 사이드바는 네이티브 목록의 색상 상속에 영향을 받지 않도록 `WorkbenchTheme.sidebarText`·`sidebarSecondary`를 명시한다. 창·도구 막대·컨트롤·사이드바 재료는 시스템 표현을 유지합니다. 시스템 컨트롤 전체를 시안의 HEX 값으로 치환하지 않습니다.
 
 | 계층 | 예 | 역할 |
 | --- | --- | --- |

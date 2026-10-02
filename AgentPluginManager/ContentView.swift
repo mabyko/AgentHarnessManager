@@ -9,7 +9,7 @@ struct ContentView: View {
     var body: some View {
         @Bindable var store = store
         NavigationSplitView {
-            sidebar.navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 280)
+            sidebar.navigationSplitViewColumnWidth(min: 210, ideal: 250, max: 320)
         } detail: {
             VStack(spacing: 0) {
                 if store.page == .profiles {
@@ -17,14 +17,24 @@ struct ContentView: View {
                 } else {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(store.page.title).font(.title2.weight(.semibold))
+                        Text(store.page == .library ? store.sourceTitle : store.page.title).font(.title2.weight(.semibold))
                         Text(scopeTitle).font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text("\(store.filteredEntries.count + (store.page == .findings ? store.filteredProblemRoots.count : 0))개 표시").foregroundStyle(.secondary).monospacedDigit()
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("\(store.filteredEntries.count + (store.page == .findings ? store.filteredProblemRoots.count : 0))개 표시")
+                        if store.page == .library {
+                            Text("출처 전체 \(store.sourceEntryCount)개").font(.caption)
+                        }
+                    }.foregroundStyle(.secondary).monospacedDigit()
                 }
                 .padding(24)
                 filters
+                if let message = store.sourceMessage, store.page == .library {
+                    Label(message, systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(WorkbenchTheme.warning)
+                        .padding(.horizontal, 24).padding(.bottom, 12)
+                }
                 Divider()
                 if store.filteredEntries.isEmpty && (store.page != .findings || store.filteredProblemRoots.isEmpty) {
                     emptyState.frame(maxHeight: .infinity)
@@ -77,7 +87,7 @@ struct ContentView: View {
                     }.help("에이전트 경로와 화면 모드 관리 (⌘,)")
                 }
             }
-            .searchable(text: $store.search, placement: .toolbar, prompt: store.page == .profiles ? "작업 구성 검색" : "이름 또는 설치 경로")
+            .searchable(text: $store.search, placement: .toolbar, prompt: store.page == .profiles ? "작업 구성 검색" : "이름, 출처 또는 설치 경로")
         }
         .tint(WorkbenchTheme.accent)
         .sheet(item: $store.selectedEntry) { entry in
@@ -88,43 +98,57 @@ struct ContentView: View {
 
     private var sidebar: some View {
         List {
-            Section("스킬 관리") {
+            Section {
                 navigationRow(.profiles)
                 navigationRow(.library)
                 navigationRow(.findings)
-            }
-            Section("스킬 폴더") {
-                ForEach(store.registeredRoots) { root in
-                    Button { store.showLibrary(rootID: root.id) } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(root.label).font(.callout)
-                            Text(root.url.displayPath).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading).padding(6)
-                        .background(store.rootFilterID == root.id ? WorkbenchTheme.selection : .clear, in: RoundedRectangle(cornerRadius: 6))
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain).help(root.url.path)
-                    .accessibilityLabel("\(root.label), \(root.url.path), 스킬 목록 보기")
-                    .accessibilityAddTraits(store.rootFilterID == root.id ? .isSelected : [])
+            } header: { Text("스킬 관리").foregroundStyle(WorkbenchTheme.sidebarText) }
+            Section {
+                sourceRow("모든 출처", id: nil, count: store.entries.count)
+                ForEach(store.sourceGroups) { group in
+                    sourceRow(group.repository.name, id: group.id, count: group.count)
                 }
-            }
+                sourceRow("출처 미확인", id: AppStore.unknownSourceID, count: store.unknownSourceCount)
+            } header: { Text("출처").foregroundStyle(WorkbenchTheme.sidebarText) }
 
         }.listStyle(.sidebar)
     }
 
+    private func sourceRow(_ title: String, id: String?, count: Int) -> some View {
+        let selected = store.page == .library && store.sourceFilterID == id
+        return Button { store.showLibrary(sourceID: id) } label: {
+            HStack(spacing: 8) {
+                Image(systemName: id == AppStore.unknownSourceID ? "questionmark.folder" : "shippingbox").frame(width: 18)
+                Text(title).foregroundStyle(selected ? WorkbenchTheme.accent : WorkbenchTheme.sidebarText).lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 2)
+                Text("\(count)").foregroundStyle(selected ? WorkbenchTheme.accent : WorkbenchTheme.sidebarSecondary).font(.caption).monospacedDigit()
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(WorkbenchTheme.raised, in: Capsule())
+                    .fixedSize()
+            }
+            .foregroundStyle(selected ? WorkbenchTheme.accent : WorkbenchTheme.sidebarSecondary)
+            .padding(8)
+            .background(selected ? WorkbenchTheme.selection : .clear, in: RoundedRectangle(cornerRadius: 6))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("\(title) · 설치 항목 \(count)개 (복사본과 링크 포함)")
+        .accessibilityLabel("\(title), 설치 항목 \(count)개")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
     private func navigationRow(_ page: AppPage) -> some View {
-        let selected = store.page == page && store.rootFilterID == nil
+        let selected = store.page == page
         return Button {
             if page == .library { store.showLibrary() } else { store.page = page }
         } label: {
             HStack {
                 Image(systemName: page.symbol).frame(width: 18)
-                Text(page == .library ? "모든 스킬" : page.title)
+                Text(page.title).foregroundStyle(selected ? WorkbenchTheme.accent : WorkbenchTheme.sidebarText)
                 Spacer()
-                if page == .findings, store.findingCount > 0 { Text("\(store.findingCount)").font(.caption) }
+                if page == .findings, store.findingCount > 0 { Text("\(store.findingCount)").font(.caption).foregroundStyle(WorkbenchTheme.sidebarSecondary) }
             }
-            .foregroundStyle(selected ? WorkbenchTheme.accent : .secondary)
+            .foregroundStyle(selected ? WorkbenchTheme.accent : WorkbenchTheme.sidebarSecondary)
             .padding(8)
             .background(selected ? WorkbenchTheme.selection : .clear, in: RoundedRectangle(cornerRadius: 6))
             .contentShape(Rectangle())
@@ -133,24 +157,32 @@ struct ContentView: View {
 
     private var scopeTitle: String {
         if store.page == .findings { return "읽기 문제와 등록 경로의 오류" }
-        return store.registeredRoots.first { $0.id == store.rootFilterID }?.label ?? "등록한 모든 스킬 폴더"
+        if let root = store.registeredRoots.first(where: { $0.id == store.rootFilterID }) { return root.label }
+        if let agent = store.agentFilter { return "\(agent.displayName) · 모든 설치 위치 · 복사본과 링크를 각각 표시" }
+        return "등록한 모든 설치 위치 · 복사본과 링크를 각각 표시"
     }
 
     private var filters: some View {
         @Bindable var store = store
-        return HStack(spacing: 16) {
-            if store.availableAgents.count > 1 {
-                Picker("에이전트", selection: $store.agentFilter) {
-                    Text("모든 에이전트").tag(SkillAgent?.none)
-                    ForEach(store.availableAgents, id: \.self) { agent in
-                        Text(agent.displayName).tag(Optional(agent))
-                    }
-                }.frame(maxWidth: 260)
-            }
-            Toggle("링크 항목만", isOn: $store.linksOnly).toggleStyle(.checkbox)
+        return HStack(spacing: 12) {
+            Picker("에이전트", selection: $store.agentFilter) {
+                Text("모든 에이전트").tag(SkillAgent?.none)
+                ForEach(store.availableAgents, id: \.self) { agent in
+                    Text(agent.displayName).tag(Optional(agent))
+                }
+            }.labelsHidden().accessibilityLabel("에이전트").frame(maxWidth: 170)
+                .help("선택한 에이전트의 설치 위치만 표시합니다")
+            Picker("설치 위치", selection: $store.rootFilterID) {
+                Text("모든 설치 위치").tag(String?.none)
+                ForEach(store.availableRoots) { root in
+                    Text(root.label).tag(Optional(root.id))
+                }
+            }.labelsHidden().accessibilityLabel("설치 위치").frame(maxWidth: 230)
+                .help("특정 위치를 선택하면 해당 에이전트가 함께 선택됩니다. 모든 설치 위치는 현재 에이전트의 모든 경로입니다")
+            Toggle("링크만", isOn: $store.linksOnly).toggleStyle(.checkbox)
                 .help("다른 위치의 원본을 가리키는 심볼릭 링크만 표시합니다")
-            Spacer()
-            if store.hasFilters { Button("필터 초기화") { store.resetFilters() } }
+            Spacer(minLength: 0)
+            if store.hasFilters { Button("초기화") { store.resetFilters() }.help("현재 출처의 검색과 필터 초기화") }
         }.padding(.horizontal, 24).padding(.bottom, 16)
     }
 
@@ -158,9 +190,9 @@ struct ContentView: View {
         VStack(spacing: 12) {
             Image(systemName: store.page == .findings ? "checkmark.circle" : "doc.text.magnifyingglass")
                 .font(.system(size: 30)).foregroundStyle(.secondary)
-            Text((!store.hasScanned || store.isScanning) ? "스킬을 확인하고 있습니다" : store.hasFilters ? "조건에 맞는 결과가 없습니다" : store.page == .findings ? "확인이 필요한 문제가 없습니다" : "이 위치에서 스킬을 찾지 못했습니다")
+            Text((!store.hasScanned || store.isScanning) ? "스킬을 확인하고 있습니다" : store.hasFilters ? "조건에 맞는 결과가 없습니다" : store.page == .findings ? "확인이 필요한 문제가 없습니다" : "이 출처나 위치에서 스킬을 찾지 못했습니다")
                 .font(.title3.weight(.semibold))
-            if store.hasFilters { Text("검색어나 필터를 바꾸거나 위의 필터 초기화를 눌러 주세요.").foregroundStyle(.secondary) }
+            if store.hasFilters { Text("검색어나 필터를 바꾸거나 위의 초기화를 눌러 주세요.").foregroundStyle(.secondary) }
             else if store.page == .library {
                 Text("설정에서 스킬 폴더의 상태를 확인하거나 경로를 추가하세요.").foregroundStyle(.secondary)
                 Button("설정 열기") { openSettings() }
@@ -174,22 +206,28 @@ struct ContentView: View {
                 Image(systemName: entry.isSymbolicLink ? "link" : "doc.text")
                     .foregroundStyle(.secondary).frame(width: 24)
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(entry.name).font(.callout.weight(.semibold))
-                        Text(store.agentName(for: entry)).font(.caption).foregroundStyle(.secondary)
-                    }
+                    Text(entry.name).font(.callout.weight(.semibold))
+                    HStack(spacing: 6) {
+                        Text(store.sourceRepository(for: entry)?.name ?? "출처 미확인")
+                        if store.sourceRepository(for: entry) != nil {
+                            Text("· " + store.sourceEvidence(for: entry))
+                        }
+                    }.font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     Text(entry.url.displayPath).font(.system(.caption, design: .monospaced))
                         .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                     if let problem = entry.problem {
                         Label(problem, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(WorkbenchTheme.warning)
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                VStack(alignment: .trailing, spacing: 6) {
+                    Text(store.agentName(for: entry)).font(.caption).foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                }
             }.padding(.vertical, 9).contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help("\(entry.url.path)\n눌러서 SKILL.md 원문 보기")
-        .accessibilityLabel("\(entry.name), \(store.agentName(for: entry)), \(entry.url.path), \(entry.problem ?? "원문 보기")")
+        .accessibilityLabel("\(entry.name), \(store.agentName(for: entry)), \(store.sourceRepository(for: entry)?.name ?? "출처 미확인"), \(entry.url.path), \(entry.problem ?? "원문 보기")")
         .accessibilityIdentifier("entry-\(entry.id)")
     }
 }
@@ -199,6 +237,8 @@ private struct SkillDetailSheet: View {
     let roots: [DiscoveryRoot]
     let agentName: String
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppStore.self) private var store
+    @State private var editingSource: SkillEntry?
     @State private var document: String?
     @State private var errorMessage: String?
     @State private var copied = false
@@ -209,7 +249,17 @@ private struct SkillDetailSheet: View {
                 VStack(alignment: .leading, spacing: 18) {
                     Text(entry.name).font(.title2.weight(.semibold))
                     LabeledContent("에이전트", value: agentName)
-                    LabeledContent("출처 저장소", value: "확인되지 않음")
+                    VStack(alignment: .leading, spacing: 8) {
+                        LabeledContent("출처 저장소", value: store.sourceRepository(for: entry)?.name ?? "출처 미확인")
+                        HStack {
+                            Text(store.sourceEvidence(for: entry)).font(.caption).foregroundStyle(.secondary)
+                            Spacer()
+                            Button(store.sourceRepository(for: entry) == nil ? "출처 연결…" : "출처 수정…") { editingSource = entry }
+                                .disabled(store.isScanning || store.sourcesLoadFailed)
+                        }
+                        Text("설치 기록이나 직접 연결한 주소입니다. 현재 파일과 저장소의 일치 여부는 확인하지 않습니다.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     VStack(alignment: .leading, spacing: 6) {
                         Text("설치 위치").foregroundStyle(.secondary)
                         Text(entry.url.path).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
@@ -245,6 +295,7 @@ private struct SkillDetailSheet: View {
                 Button("닫기") { dismiss() }.keyboardShortcut(.cancelAction)
             }.padding(18).background(WorkbenchTheme.raised)
         }.frame(width: 700, height: 600).background(WorkbenchTheme.surface)
+        .sheet(item: $editingSource) { SourceEditorSheet(entry: $0) }
         .task(id: entry.id) {
             document = nil; errorMessage = nil
             do {
@@ -256,5 +307,48 @@ private struct SkillDetailSheet: View {
                 if !Task.isCancelled { errorMessage = error.localizedDescription }
             }
         }
+    }
+}
+
+private struct SourceEditorSheet: View {
+    let entry: SkillEntry
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    @State private var input = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("출처 연결").font(.title2.weight(.semibold))
+            Text(entry.name).foregroundStyle(.secondary)
+            TextField("저장소 주소", text: $input, prompt: Text("owner/repo 또는 https://github.com/owner/repo"))
+                .textFieldStyle(.roundedBorder)
+            if !store.sourceGroups.isEmpty {
+                Menu("등록된 출처에서 선택") {
+                    ForEach(store.sourceGroups) { group in
+                        Button(group.repository.name) { input = group.repository.id }
+                    }
+                }.fixedSize()
+            }
+            Text("이 설치 항목의 출처만 앱에 저장합니다. 다른 복사본이나 원본 파일에는 적용하지 않습니다.")
+                .font(.caption).foregroundStyle(.secondary)
+            if let message = store.sourceMessage {
+                Text(message).font(.caption).foregroundStyle(WorkbenchTheme.warning)
+            }
+            HStack {
+                if store.manualSources[entry.id] != nil {
+                    Button("수동 연결 해제") {
+                        if store.saveSource(for: entry, input: nil) { dismiss() }
+                    }.disabled(store.isScanning || store.sourcesLoadFailed)
+                        .help("설치 기록이 있으면 해당 출처로 돌아갑니다")
+                }
+                Spacer()
+                Button("취소") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("저장") {
+                    if store.saveSource(for: entry, input: input) { dismiss() }
+                }.keyboardShortcut(.defaultAction).disabled(store.isScanning || store.sourcesLoadFailed)
+            }
+        }
+        .padding(24).frame(width: 560)
+        .task { input = store.sourceRepository(for: entry)?.id ?? "" }
     }
 }

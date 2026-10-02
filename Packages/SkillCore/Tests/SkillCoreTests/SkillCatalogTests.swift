@@ -101,6 +101,40 @@ final class SkillCatalogTests: XCTestCase {
         }
     }
 
+    func testInstallerReceiptIsOptionalBoundedAndDoesNotFollowMetadataLinks() throws {
+        try withTemporaryDirectory { home in
+            let source = try makeSkill("example", under: home.appendingPathComponent(".agents/skills"))
+            let roots = [root(source.deletingLastPathComponent())]
+            let entries = SkillCatalog.scan(roots: roots).entries
+            let lock = home.appendingPathComponent(".agents/.skill-lock.json")
+            XCTAssertTrue(SkillCatalog.installerSources(entries: entries, home: home).repositories.isEmpty)
+            let valid = Data(#"{"version":3,"skills":{"example":{"sourceType":"github","sourceUrl":"https://github.com/owner/repo.git"}}}"#.utf8)
+            try valid.write(to: lock)
+            XCTAssertEqual(SkillCatalog.installerSources(entries: entries, home: home).repositories[entries[0].id]?.name, "owner/repo")
+            for invalid in [Data("invalid JSON".utf8), Data([0xFF]), Data(repeating: 65, count: 2 * 1_024 * 1_024 + 1), Data(#"{"version":4,"skills":{}}"#.utf8)] {
+                try invalid.write(to: lock)
+                let result = SkillCatalog.installerSources(entries: entries, home: home)
+                XCTAssertTrue(result.repositories.isEmpty)
+                XCTAssertNotNil(result.message)
+            }
+            try FileManager.default.removeItem(at: lock)
+            let outside = home.appendingPathComponent("external-lock")
+            try valid.write(to: outside)
+            try FileManager.default.createSymbolicLink(at: lock, withDestinationURL: outside)
+            XCTAssertNotNil(SkillCatalog.installerSources(entries: entries, home: home).message)
+            try FileManager.default.removeItem(at: lock)
+            XCTAssertEqual(mkfifo(lock.path, 0o600), 0)
+            XCTAssertNotNil(SkillCatalog.installerSources(entries: entries, home: home).message)
+            try FileManager.default.removeItem(at: lock)
+            try valid.write(to: lock)
+            let held = home.appendingPathComponent("held")
+            try FileManager.default.moveItem(at: home.appendingPathComponent(".agents"), to: held)
+            try FileManager.default.createSymbolicLink(at: home.appendingPathComponent(".agents"), withDestinationURL: held)
+            XCTAssertNotNil(SkillCatalog.installerSources(entries: entries, home: home).message)
+            XCTAssertEqual(try Data(contentsOf: outside), valid)
+        }
+    }
+
     private let document = "---\nname: example\ndescription: Read-only fixture\n---\n# Example\n안녕하세요\n"
 
     private func root(_ url: URL, agent: SkillAgent = .codex) -> DiscoveryRoot {

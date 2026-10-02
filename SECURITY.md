@@ -13,7 +13,8 @@ Include the affected commit or version, macOS version, a minimal reproduction us
 - Skill discovery and document reading are confined to registered roots. External link targets require registration before their content can be read.
 - The reader accepts regular UTF-8 files up to 2 MiB. It does not read devices, sockets, or FIFOs as skill documents.
 - The app does not execute skill scripts, install plugins, or make network requests.
-- Work configurations and settings are local metadata. Saving or removing them does not change skill files.
+- The optional version-3 global installer receipt at `~/.agents/.skill-lock.json` is read separately for source classification. The metadata reader uses anchored, no-follow directory/file opens and rejects symlinks, special files, invalid UTF-8, and files over 2 MiB. Receipt and manual repository URLs reject embedded credentials. Source associations are not content verification or file-access authorization.
+- Work configurations, source associations, and settings are local metadata. Saving or removing them does not change skill files.
 - The app is not sandboxed; registered-root checks are application-level protections. Local ad-hoc builds are not notarized distribution builds.
 
 Changes that could bypass root restrictions, read unintended files, corrupt saved metadata, or introduce unreviewed file writes are relevant security reports.
