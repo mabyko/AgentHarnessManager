@@ -13,7 +13,7 @@ struct ProfilesView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("작업 구성").font(.system(size: 29, weight: .semibold))
-                        Text("할 일에 맞는 스킬을 모아 두고, 필요할 때 다시 꺼내 보세요.").foregroundStyle(.secondary)
+                        Text("작업에 필요한 스킬을 선택하고 구성으로 저장하세요.").foregroundStyle(.secondary)
                     }
                     Spacer()
                     Button("새 작업 구성", systemImage: "plus") { openEditor(WorkProfile()) }
@@ -77,14 +77,14 @@ struct ProfilesView: View {
                 Text(profile.note.isEmpty ? "설명 없음" : profile.note).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 HStack {
                     Text("스킬 \(profile.members.count)개").font(.caption)
-                    if missing > 0 { Text("미발견 \(missing)개").font(.caption).foregroundStyle(WorkbenchTheme.warning) }
+                    if missing > 0 { Text("목록에 없음 \(missing)개").font(.caption).foregroundStyle(WorkbenchTheme.warning) }
                 }
             }.padding(20).frame(maxWidth: .infinity, minHeight: 145, alignment: .leading)
                 .background(selected ? WorkbenchTheme.selection : WorkbenchTheme.raised, in: RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(selected ? WorkbenchTheme.accent : WorkbenchTheme.border, lineWidth: 1))
                 .contentShape(RoundedRectangle(cornerRadius: 10))
         }.buttonStyle(.plain)
-            .accessibilityLabel("\(profile.name), 스킬 \(profile.members.count)개, 미발견 \(missing)개")
+            .accessibilityLabel("\(profile.name), 스킬 \(profile.members.count)개, 목록에 없음 \(missing)개")
             .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
@@ -115,7 +115,7 @@ struct ProfilesView: View {
                     }
                 }
             }
-            Label("구성 선택·저장으로 파일이 바뀌지 않습니다. 파일 적용은 준비 중입니다.", systemImage: "lock")
+            Label("구성을 선택하거나 저장해도 스킬 파일은 바뀌지 않습니다. 파일에 적용하는 기능은 준비 중입니다.", systemImage: "lock")
                 .font(.caption).foregroundStyle(.secondary).padding(18)
         }.background(WorkbenchTheme.raised, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(WorkbenchTheme.border, lineWidth: 1))
@@ -131,7 +131,7 @@ struct ProfilesView: View {
                     .font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
             }
             Spacer()
-            Text(entry == nil ? "현재 목록에 없음" : entry?.problem == nil ? "발견됨" : "확인 필요")
+            Text(entry == nil ? "현재 목록에 없음" : entry?.problem == nil ? "목록에 있음" : "확인 필요")
                 .font(.caption).foregroundStyle(entry == nil || entry?.problem != nil ? WorkbenchTheme.warning : .secondary)
             if entry != nil { Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary) }
         }.padding(18).contentShape(Rectangle())
@@ -178,7 +178,7 @@ private struct ProfileEditor: View {
                     .textFieldStyle(.roundedBorder).accessibilityLabel("구성에 넣을 스킬 검색")
                 if !missingIDs.isEmpty {
                     HStack {
-                        Label("현재 발견되지 않은 스킬 \(missingIDs.count)개를 보존합니다.", systemImage: "exclamationmark.triangle").foregroundStyle(WorkbenchTheme.warning)
+                        Label("현재 목록에 없는 스킬 \(missingIDs.count)개를 유지합니다.", systemImage: "exclamationmark.triangle").foregroundStyle(WorkbenchTheme.warning)
                         Spacer()
                         Button("구성에서 제외") { selectedIDs.subtract(missingIDs) }
                     }.font(.caption)

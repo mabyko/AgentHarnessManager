@@ -64,7 +64,7 @@ struct ContentView: View {
                 .background(WorkbenchTheme.raised)
             }
             .background(WorkbenchTheme.surface)
-            .navigationTitle("스킬 작업대")
+            .navigationTitle("Agent Plugin Manager")
             .toolbar {
                 ToolbarItem {
                     Button { Task { await store.rescan() } } label: {
@@ -88,7 +88,7 @@ struct ContentView: View {
 
     private var sidebar: some View {
         List {
-            Section("작업대") {
+            Section("스킬 관리") {
                 navigationRow(.profiles)
                 navigationRow(.library)
                 navigationRow(.findings)
@@ -215,7 +215,7 @@ private struct SkillDetailSheet: View {
                 VStack(alignment: .leading, spacing: 18) {
                     Text(entry.name).font(.title2.weight(.semibold))
                     LabeledContent("에이전트", value: agentName)
-                    LabeledContent("저장소 출처", value: "미확인")
+                    LabeledContent("출처 저장소", value: "확인되지 않음")
                     VStack(alignment: .leading, spacing: 6) {
                         Text("설치 위치").foregroundStyle(.secondary)
                         Text(entry.url.path).font(.system(.callout, design: .monospaced)).textSelection(.enabled)

@@ -7,179 +7,179 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0F5F6927D72C5DE09820B3B4 /* ProfilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EB86A26CBC5262B3D9BC55F /* ProfilesView.swift */; };
-		114F1E39361EF31FC239EE4B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B9A834E1675457BCB4207F14 /* Assets.xcassets */; };
-		7E7D454E20A92AB071A01097 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 277827609779BA05136A0460 /* Theme.swift */; };
-		A7089CE01C6C2BA15025FB20 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8010E858503CF02CF150EA95 /* ContentView.swift */; };
-		C1A628B7612AD7FDAF3D9BB3 /* SkillCore in Frameworks */ = {isa = PBXBuildFile; productRef = F2A96AC8AF5886541658D008 /* SkillCore */; };
-		CF86071D1F5875AB46782371 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFD2E4F5264110BE53198B39 /* AppStore.swift */; };
-		ED6BE1D3B6D5C2A3C4279A11 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10E7E4193DC46430D526E9B /* SettingsView.swift */; };
-		F806D074844262934089C008 /* AgentSkillManagerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 363085E251D700F393EB121E /* AgentSkillManagerApp.swift */; };
+		2AB1585479B2410D06BAFB96 /* ProfilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01A5394F1BC62BA8CEF16946 /* ProfilesView.swift */; };
+		3D32FEB9B0807200C096F02B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E1D4B59B25464C4814254D3 /* SettingsView.swift */; };
+		5F4D5D46A4F5E1840EBD87F8 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44176E6A2D5F1095426D0421 /* Theme.swift */; };
+		82F61AB2E78802480B22AD69 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50947EDD53EDB6A74C7C485E /* AppStore.swift */; };
+		857488910316F82A4D87E4D0 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B1CBE0CC988D699D3DC835E /* ContentView.swift */; };
+		AAE3CEF1B99CD6FC7BDC5E9D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E6E0E15DF0CC08520B21C5C5 /* Assets.xcassets */; };
+		DD7147C478728459D6B809DC /* SkillCore in Frameworks */ = {isa = PBXBuildFile; productRef = 6C859545C06B66412E96C1E0 /* SkillCore */; };
+		FC973A6DECD527DD94A7EC70 /* AgentPluginManagerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411729D44B73A9879EB88D8B /* AgentPluginManagerApp.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		1EB86A26CBC5262B3D9BC55F /* ProfilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesView.swift; sourceTree = "<group>"; };
-		277827609779BA05136A0460 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
-		363085E251D700F393EB121E /* AgentSkillManagerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSkillManagerApp.swift; sourceTree = "<group>"; };
-		8010E858503CF02CF150EA95 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		AFD2E4F5264110BE53198B39 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
-		B9A834E1675457BCB4207F14 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		C9C85132FF0F61BE20FCCC10 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
-		E91E1E9A8A8497C82A574D25 /* AgentSkillManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentSkillManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		F10E7E4193DC46430D526E9B /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		F75C2CF6012E6570C88DD153 /* SkillCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SkillCore; path = Packages/SkillCore; sourceTree = SOURCE_ROOT; };
+		01A5394F1BC62BA8CEF16946 /* ProfilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesView.swift; sourceTree = "<group>"; };
+		1D893C0975ADE6112F1D11F3 /* AgentPluginManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentPluginManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		411729D44B73A9879EB88D8B /* AgentPluginManagerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentPluginManagerApp.swift; sourceTree = "<group>"; };
+		44176E6A2D5F1095426D0421 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		50947EDD53EDB6A74C7C485E /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
+		6B1CBE0CC988D699D3DC835E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		793B362747985D0CE9C15BFA /* SkillCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SkillCore; path = Packages/SkillCore; sourceTree = SOURCE_ROOT; };
+		7E1D4B59B25464C4814254D3 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		D295A2531CB078E3D0BB48B4 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		E6E0E15DF0CC08520B21C5C5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		AA4B61DD4C70E3F99F460468 /* Frameworks */ = {
+		14178D651D1E118C15A79973 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C1A628B7612AD7FDAF3D9BB3 /* SkillCore in Frameworks */,
+				DD7147C478728459D6B809DC /* SkillCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		4C1D90A0D1358EBE28220C74 /* Packages */ = {
+		0A3CAE3F1A89D8D0788678C1 /* AgentPluginManager */ = {
 			isa = PBXGroup;
 			children = (
-				F75C2CF6012E6570C88DD153 /* SkillCore */,
+				411729D44B73A9879EB88D8B /* AgentPluginManagerApp.swift */,
+				50947EDD53EDB6A74C7C485E /* AppStore.swift */,
+				E6E0E15DF0CC08520B21C5C5 /* Assets.xcassets */,
+				6B1CBE0CC988D699D3DC835E /* ContentView.swift */,
+				01A5394F1BC62BA8CEF16946 /* ProfilesView.swift */,
+				7E1D4B59B25464C4814254D3 /* SettingsView.swift */,
+				44176E6A2D5F1095426D0421 /* Theme.swift */,
 			);
-			path = Packages;
+			path = AgentPluginManager;
 			sourceTree = "<group>";
 		};
-		973045EE6AE7A9B7BAF8D762 = {
+		38CB6B928320F6FFA8763D02 /* Config */ = {
 			isa = PBXGroup;
 			children = (
-				BE7F5754800462DF9576AFFD /* AgentSkillManager */,
-				B8D7F82080AE2FF7CE960E7D /* Config */,
-				4C1D90A0D1358EBE28220C74 /* Packages */,
-				9EE8918E536EB649D8953E57 /* Products */,
-			);
-			sourceTree = "<group>";
-		};
-		9EE8918E536EB649D8953E57 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				E91E1E9A8A8497C82A574D25 /* AgentSkillManager.app */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-		B8D7F82080AE2FF7CE960E7D /* Config */ = {
-			isa = PBXGroup;
-			children = (
-				C9C85132FF0F61BE20FCCC10 /* Base.xcconfig */,
+				D295A2531CB078E3D0BB48B4 /* Base.xcconfig */,
 			);
 			path = Config;
 			sourceTree = "<group>";
 		};
-		BE7F5754800462DF9576AFFD /* AgentSkillManager */ = {
+		4EB4ECC77574BAC15E8F8636 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				363085E251D700F393EB121E /* AgentSkillManagerApp.swift */,
-				AFD2E4F5264110BE53198B39 /* AppStore.swift */,
-				B9A834E1675457BCB4207F14 /* Assets.xcassets */,
-				8010E858503CF02CF150EA95 /* ContentView.swift */,
-				1EB86A26CBC5262B3D9BC55F /* ProfilesView.swift */,
-				F10E7E4193DC46430D526E9B /* SettingsView.swift */,
-				277827609779BA05136A0460 /* Theme.swift */,
+				1D893C0975ADE6112F1D11F3 /* AgentPluginManager.app */,
 			);
-			path = AgentSkillManager;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		664D4FC66271B7F24F9C1E19 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				793B362747985D0CE9C15BFA /* SkillCore */,
+			);
+			path = Packages;
+			sourceTree = "<group>";
+		};
+		CF319855D2ACA4FD920E2BF4 = {
+			isa = PBXGroup;
+			children = (
+				0A3CAE3F1A89D8D0788678C1 /* AgentPluginManager */,
+				38CB6B928320F6FFA8763D02 /* Config */,
+				664D4FC66271B7F24F9C1E19 /* Packages */,
+				4EB4ECC77574BAC15E8F8636 /* Products */,
+			);
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		471AD8DA708CB27ADEEFF0D1 /* AgentSkillManager */ = {
+		01C5775D1CB47C05F0C5B7A6 /* AgentPluginManager */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 07625156246FF9771796F72F /* Build configuration list for PBXNativeTarget "AgentSkillManager" */;
+			buildConfigurationList = ECFA9D1A9D11001FCCE0670D /* Build configuration list for PBXNativeTarget "AgentPluginManager" */;
 			buildPhases = (
-				8B8328A4829453566AAEA7FA /* Sources */,
-				37235EF975A4581BAA7CA5BE /* Resources */,
-				AA4B61DD4C70E3F99F460468 /* Frameworks */,
+				772E63105F71CA63D97E4ECF /* Sources */,
+				2754D8AD7277C26B2B19D1C1 /* Resources */,
+				14178D651D1E118C15A79973 /* Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
-			name = AgentSkillManager;
+			name = AgentPluginManager;
 			packageProductDependencies = (
-				F2A96AC8AF5886541658D008 /* SkillCore */,
+				6C859545C06B66412E96C1E0 /* SkillCore */,
 			);
-			productName = AgentSkillManager;
-			productReference = E91E1E9A8A8497C82A574D25 /* AgentSkillManager.app */;
+			productName = AgentPluginManager;
+			productReference = 1D893C0975ADE6112F1D11F3 /* AgentPluginManager.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		B8BED32E25F343B0AF2191F6 /* Project object */ = {
+		DF38D7EF27DF12F2CDD6446D /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
-					471AD8DA708CB27ADEEFF0D1 = {
+					01C5775D1CB47C05F0C5B7A6 = {
 						ProvisioningStyle = Automatic;
 					};
 				};
 			};
-			buildConfigurationList = 50E89C1BF77F9B0AB7939963 /* Build configuration list for PBXProject "AgentSkillManager" */;
+			buildConfigurationList = C937D518E301D958A9A2A200 /* Build configuration list for PBXProject "AgentPluginManager" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				Base,
 				en,
 			);
-			mainGroup = 973045EE6AE7A9B7BAF8D762;
+			mainGroup = CF319855D2ACA4FD920E2BF4;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				E2F50152C36092C9B243F695 /* XCLocalSwiftPackageReference "Packages/SkillCore" */,
+				5DA09978C4E643B6E7C31637 /* XCLocalSwiftPackageReference "Packages/SkillCore" */,
 			);
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 9EE8918E536EB649D8953E57 /* Products */;
+			productRefGroup = 4EB4ECC77574BAC15E8F8636 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				471AD8DA708CB27ADEEFF0D1 /* AgentSkillManager */,
+				01C5775D1CB47C05F0C5B7A6 /* AgentPluginManager */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		37235EF975A4581BAA7CA5BE /* Resources */ = {
+		2754D8AD7277C26B2B19D1C1 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				114F1E39361EF31FC239EE4B /* Assets.xcassets in Resources */,
+				AAE3CEF1B99CD6FC7BDC5E9D /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		8B8328A4829453566AAEA7FA /* Sources */ = {
+		772E63105F71CA63D97E4ECF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F806D074844262934089C008 /* AgentSkillManagerApp.swift in Sources */,
-				CF86071D1F5875AB46782371 /* AppStore.swift in Sources */,
-				A7089CE01C6C2BA15025FB20 /* ContentView.swift in Sources */,
-				0F5F6927D72C5DE09820B3B4 /* ProfilesView.swift in Sources */,
-				ED6BE1D3B6D5C2A3C4279A11 /* SettingsView.swift in Sources */,
-				7E7D454E20A92AB071A01097 /* Theme.swift in Sources */,
+				FC973A6DECD527DD94A7EC70 /* AgentPluginManagerApp.swift in Sources */,
+				82F61AB2E78802480B22AD69 /* AppStore.swift in Sources */,
+				857488910316F82A4D87E4D0 /* ContentView.swift in Sources */,
+				2AB1585479B2410D06BAFB96 /* ProfilesView.swift in Sources */,
+				3D32FEB9B0807200C096F02B /* SettingsView.swift in Sources */,
+				5F4D5D46A4F5E1840EBD87F8 /* Theme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		0CA333F1EF7F20C9FB8143CF /* Debug */ = {
+		563C5118BACA5B30D64CDCA1 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = C9C85132FF0F61BE20FCCC10 /* Base.xcconfig */;
+			baseConfigurationReference = D295A2531CB078E3D0BB48B4 /* Base.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -242,14 +242,14 @@
 			};
 			name = Debug;
 		};
-		4B740F73B9B6A1A9E512F4BB /* Debug */ = {
+		6DDC0E89CA10613D1601915E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon-Dev";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 8;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -266,14 +266,14 @@
 			};
 			name = Debug;
 		};
-		A40E2B4DD75E77A52885781A /* Release */ = {
+		728770475DBAF803C64AFD23 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 8;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -290,9 +290,9 @@
 			};
 			name = Release;
 		};
-		D4A50BB6857342A0DAFAA579 /* Release */ = {
+		D5F5F310609BBFDB7BEB1862 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = C9C85132FF0F61BE20FCCC10 /* Base.xcconfig */;
+			baseConfigurationReference = D295A2531CB078E3D0BB48B4 /* Base.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -351,20 +351,20 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		07625156246FF9771796F72F /* Build configuration list for PBXNativeTarget "AgentSkillManager" */ = {
+		C937D518E301D958A9A2A200 /* Build configuration list for PBXProject "AgentPluginManager" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				4B740F73B9B6A1A9E512F4BB /* Debug */,
-				A40E2B4DD75E77A52885781A /* Release */,
+				563C5118BACA5B30D64CDCA1 /* Debug */,
+				D5F5F310609BBFDB7BEB1862 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		50E89C1BF77F9B0AB7939963 /* Build configuration list for PBXProject "AgentSkillManager" */ = {
+		ECFA9D1A9D11001FCCE0670D /* Build configuration list for PBXNativeTarget "AgentPluginManager" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				0CA333F1EF7F20C9FB8143CF /* Debug */,
-				D4A50BB6857342A0DAFAA579 /* Release */,
+				6DDC0E89CA10613D1601915E /* Debug */,
+				728770475DBAF803C64AFD23 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
@@ -372,18 +372,18 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		E2F50152C36092C9B243F695 /* XCLocalSwiftPackageReference "Packages/SkillCore" */ = {
+		5DA09978C4E643B6E7C31637 /* XCLocalSwiftPackageReference "Packages/SkillCore" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/SkillCore;
 		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		F2A96AC8AF5886541658D008 /* SkillCore */ = {
+		6C859545C06B66412E96C1E0 /* SkillCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = SkillCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
-	rootObject = B8BED32E25F343B0AF2191F6 /* Project object */;
+	rootObject = DF38D7EF27DF12F2CDD6446D /* Project object */;
 }

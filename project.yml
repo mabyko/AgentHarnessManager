@@ -1,4 +1,4 @@
-name: AgentSkillManager
+name: AgentPluginManager
 options:
   deploymentTarget:
     macOS: "26.0"
@@ -17,10 +17,10 @@ packages:
   SkillCore:
     path: Packages/SkillCore
 targets:
-  AgentSkillManager:
+  AgentPluginManager:
     type: application
     platform: macOS
-    sources: AgentSkillManager
+    sources: AgentPluginManager
     dependencies:
       - package: SkillCore
     settings:
@@ -36,15 +36,15 @@ targets:
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: YES
         MARKETING_VERSION: "0.1.0"
-        CURRENT_PROJECT_VERSION: "4"
+        CURRENT_PROJECT_VERSION: "8"
       configs:
         Debug:
           ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon-Dev
 schemes:
-  AgentSkillManager:
+  AgentPluginManager:
     build:
       targets:
-        AgentSkillManager: all
+        AgentPluginManager: all
     run:
       config: Debug
     profile:

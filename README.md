@@ -14,28 +14,28 @@
 
 이 방향은 [OpenAI 플러그인 구조](https://developers.openai.com/plugins/build/plugins)와 [Claude Code 플러그인 개요](https://code.claude.com/docs/en/plugins/overview)를 2026-10-02 확인한 결과와 사용자 결정에 근거합니다. 각 에이전트의 플러그인 구성과 동작이 같다는 뜻은 아닙니다.
 
-제품명과 기술 식별자의 전환은 분리합니다. 현재 Xcode 프로젝트·scheme·앱 파일 이름은 `AgentSkillManager`, 설치 앱 표시 이름은 ‘스킬 작업대’이며 Bundle ID와 설정 도메인도 기존 값을 사용합니다. 다음 프로젝트 이름 전환 때 기존 설치본과 사용자 설정의 연속성을 함께 확인합니다.
+Xcode 프로젝트·scheme·앱 진입점은 `AgentPluginManager`, 설치 앱과 창의 표시 이름은 **Agent Plugin Manager**입니다. 기존 작업 구성·추가 경로·화면 설정을 유지하도록 Bundle ID와 UserDefaults 키는 이전 값을 보존합니다.
 
 ## 네이티브 앱 실행
 
 macOS 26 이상과 Xcode 26 이상이 필요합니다. Xcode 27.0 / Swift 6.4 / macOS 27.0.1에서 검증했습니다. 외부 Swift 패키지 의존성은 없습니다.
 
 ```sh
-open AgentSkillManager.xcodeproj
+open AgentPluginManager.xcodeproj
 ```
 
-`AgentSkillManager` scheme을 선택해 실행합니다. 프로젝트를 다시 생성할 때만 설치된 XcodeGen이 필요합니다.
+`AgentPluginManager` scheme을 선택해 실행합니다. 프로젝트를 다시 생성할 때만 설치된 XcodeGen이 필요합니다.
 
 ```sh
 xcodegen generate --spec project.yml
-xcodebuild -project AgentSkillManager.xcodeproj -scheme AgentSkillManager -configuration Debug -derivedDataPath /tmp/agent-skill-manager-derived build
+xcodebuild -project AgentPluginManager.xcodeproj -scheme AgentPluginManager -configuration Debug -derivedDataPath /tmp/agent-plugin-manager-derived build
 swift test --package-path Packages/SkillCore
 scripts/check-app-state.sh
 ```
 
 | 위치 | 역할 |
 | --- | --- |
-| [AgentSkillManager](AgentSkillManager) | 단일 메인 창, 설정, AppStore, SwiftUI 화면과 테마 |
+| [AgentPluginManager](AgentPluginManager) | 단일 메인 창, 설정, AppStore, SwiftUI 화면과 테마 |
 | [SkillCore](Packages/SkillCore) | 등록 위치 탐색과 안전한 SKILL.md 원문 읽기, 임시 폴더 통합 테스트 |
 | [project.yml](project.yml) | Xcode 프로젝트 생성 명세 |
 | [Base.xcconfig](Config/Base.xcconfig) | 개발용 식별자와 표시 이름, 로컬 서명 설정 포함 지점 |
@@ -48,20 +48,22 @@ scripts/check-app-state.sh
 
 | 빌드 | Bundle ID | 표시 이름 | 서명 팀 |
 | --- | --- | --- | --- |
-| Debug | `forked.agentskillmanager.local.dev` | 스킬 작업대 Dev | 지정 없음 |
-| Release | `forked.agentskillmanager.local` | 스킬 작업대 | 지정 없음 |
+| Debug | `forked.agentskillmanager.local.dev` | Agent Plugin Manager Dev | 지정 없음 |
+| Release | `forked.agentskillmanager.local` | Agent Plugin Manager | 지정 없음 |
 
-기본 빌드는 Apple 팀 없이 `Sign to Run Locally`로 ad-hoc 서명합니다. 서명 없이 컴파일만 확인할 때는 빌드 명령에 `CODE_SIGNING_ALLOWED=NO`를 추가합니다. 앱 파일 이름은 `AgentSkillManager Dev.app` / `AgentSkillManager.app`이며 화면의 표시 이름은 한국어입니다. 개인 Bundle ID와 Apple 팀은 Git에서 제외된 `Config/Local.xcconfig`에 설정합니다. Developer ID 서명·공증·배포는 아직 검증하지 않았습니다.
+기본 빌드는 Apple 팀 없이 `Sign to Run Locally`로 ad-hoc 서명합니다. 서명 없이 컴파일만 확인할 때는 빌드 명령에 `CODE_SIGNING_ALLOWED=NO`를 추가합니다. 앱 파일 이름은 `Agent Plugin Manager Dev.app` / `Agent Plugin Manager.app`입니다. 개인 Bundle ID와 Apple 팀은 Git에서 제외된 `Config/Local.xcconfig`에 설정합니다. Developer ID 서명·공증·배포는 아직 검증하지 않았습니다.
 
 Debug·Release 빌드와 임시 폴더 코어 테스트 4개, 필터·경로 저장/복원·등록 해제·원본 보존의 앱 상태 검사를 통과했습니다. 작업 구성 생성·편집·검색·재실행 복원·삭제, 미발견 참조 보존, 손상 데이터 쓰기 차단과 스킬 파일 보존도 검사합니다. 초기 네이티브 검수에서 실제 설치 목록 조회, 960 × 800 pt 배치와 밝은·어두운 모드를 확인했습니다. 이후 사용자 요청으로 앱의 예시 보기·가상 데이터·개발용 예시 진입 인자를 제거하고 설정과 탐색을 재구성했습니다. 현재 실제 앱에서 에이전트 필터(Claude Code 75개), 폴더별 조회(Codex 62개), 검색 결과 없음·초기화, 설정 열기·폴더 선택 창과 원문 상세 열기/닫기를 확인했습니다. 이번 작업 구성 복구에서는 실제 창에서 생성·편집·원문 열기·재실행 복원·삭제를 확인했고 Release build 3을 설치했습니다. 검수용 구성은 삭제했으며 검수용 Debug 앱은 정상 종료·등록 해제 후 제거했습니다. 수동 경로 재실행 복원·원본 보존은 격리한 앱 상태 검사로 검증했습니다. VoiceOver·전체 키보드 탐색·macOS 26 실기기 검수는 남아 있습니다.
 
-현재 화면: [작업 구성](docs/design/native-current-profiles.png) · [스킬 목록](docs/design/native-current-library.png) · [설정](docs/design/native-current-settings.png)
+2026-10-02 이름 변경 검수에서 앱 파일·표시 이름·메인 창·설정 창·Xcode 프로젝트와 scheme을 Agent Plugin Manager로 맞췄습니다. Release 0.1.0 build 5를 `/Applications/Agent Plugin Manager.app`에 설치하고 이전 설치 경로와 LaunchServices 등록을 제거했습니다. 기존 Bundle ID와 설정은 보존했습니다. 코어 테스트 4개·앱 상태 검사·시안 검사가 통과했고 실제 창의 이름·스킬 목록·설정 열기를 확인했습니다. `/Applications`, `~/Applications`, Xcode DerivedData, 프로젝트 관련 임시 경로와 사용자 임시 폴더에서 Debug·Test 앱은 발견되지 않았습니다.
+
+이름 변경 전 검수 화면: [작업 구성](docs/design/native-current-profiles.png) · [스킬 목록](docs/design/native-current-library.png) · [설정](docs/design/native-current-settings.png)
 
 예시 기능 제거 전의 검수 자료: [네이티브 밝은 화면](docs/design/native-light.png) · [어두운 화면](docs/design/native-dark.png) · [변경 검토 예시](docs/design/native-review.png)
 
 ## 앱 아이콘
 
-사용자가 선택한 B 시안의 Markdown 지침 묶음과 파란 명령 프롬프트 아이콘을 적용했습니다. Release는 `AppIcon`, 별도 Bundle ID의 Debug는 주황색 D 표시가 있는 `AppIcon-Dev`를 사용합니다. [원본과 생성 프롬프트](docs/design/icons/README.md) · [작은 크기 비교](docs/design/icons/size-preview.png). Xcode 자산은 `AgentSkillManager/Assets.xcassets`에 있으며 `project.yml`에서 빌드별 아이콘을 지정합니다. 두 빌드의 자산 컴파일과 서명을 확인했고, 현재 설치된 Release는 0.1.0의 build 4이며 B 아이콘을 사용합니다. [서비스 중심 아이콘 후보](docs/design/icons/service-candidates/README.md)는 비교 자료로 보존합니다. Debug·Release 자산 컴파일·서명과 설치본 아이콘을 확인했고, 설정을 보존하며 검수용 Debug 앱을 제거했습니다.
+사용자가 선택한 B 시안의 Markdown 지침 묶음과 파란 명령 프롬프트 아이콘을 적용했습니다. Release는 `AppIcon`, 별도 Bundle ID의 Debug는 주황색 D 표시가 있는 `AppIcon-Dev`를 사용합니다. [원본과 생성 프롬프트](docs/design/icons/README.md) · [작은 크기 비교](docs/design/icons/size-preview.png). Xcode 자산은 `AgentPluginManager/Assets.xcassets`에 있으며 `project.yml`에서 빌드별 아이콘을 지정합니다. 두 빌드의 자산 컴파일과 서명을 확인했고, 현재 설치된 Release는 0.1.0의 build 8이며 B 아이콘을 사용합니다. [서비스 중심 아이콘 후보](docs/design/icons/service-candidates/README.md)는 비교 자료로 보존합니다. Debug·Release 자산 컴파일·서명과 설치본 아이콘을 확인했고, 설정을 보존하며 검수용 Debug 앱을 제거했습니다.
 
 ## 설계 문서
 

@@ -192,7 +192,7 @@ Foundation의 [파일 이동 문서](https://developer.apple.com/documentation/f
 ## 영속화와 복구
 
 ```text
-Application Support/AgentSkillManager/
+Application Support/AgentPluginManager/
   state.json                 등록 위치, 항목 ID, 출처 저장소·기록, 그룹, 프로필, 전역 고정, 즐겨찾기, lastAppliedOperationID
   operations/<UUID>.json     계획과 이동별 진행 상태
   backups/<UUID>/            편집 기능 도입 시 원본 보존
@@ -267,7 +267,7 @@ Codex는 변경을 자동 감지하며 보이지 않을 때 재시작을 안내�
 
 ```text
 App/
-  AgentSkillManagerApp.swift
+  AgentPluginManagerApp.swift
   AppStore.swift
   LibraryView.swift
   SkillDetailView.swift
