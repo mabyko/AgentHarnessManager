@@ -164,7 +164,7 @@ for (const match of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) 
   new vm.Script(match[1]);
 }
 new vm.Script(readFileSync(resolve(root,'docs/design/preview-controller.js'),'utf8'));
-for(const file of ['README.md','GLOSSARY.md','docs/product-scenarios.md','docs/design-system.md','docs/architecture.md','docs/design/final-candidate.md']) {
+for(const file of ['README.md','README.ko.md','CONTRIBUTING.md','SECURITY.md','THIRD_PARTY_NOTICES.md','docs/README.md','GLOSSARY.md','docs/product-scenarios.md','docs/design-system.md','docs/architecture.md','docs/design/final-candidate.md']) {
   const text=readFileSync(resolve(root,file),'utf8');
   for(const match of text.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
     const target=match[1].split('#')[0];

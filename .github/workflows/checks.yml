@@ -1,0 +1,34 @@
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          node --version
+      - name: Core tests
+        run: swift test --package-path Packages/SkillCore
+      - name: App-state checks
+        run: scripts/check-app-state.sh
+      - name: Design and documentation checks
+        run: node scripts/check-design.mjs
+      - name: Release build
+        run: >-
+          xcodebuild -project AgentPluginManager.xcodeproj
+          -scheme AgentPluginManager -configuration Release
+          -derivedDataPath build CODE_SIGNING_ALLOWED=NO build

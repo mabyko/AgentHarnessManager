@@ -6,3 +6,6 @@ DerivedData/
 xcuserdata/
 Config/Local.xcconfig
 Config/Identities/
+/build/
+*.xcarchive
+*.dSYM/
