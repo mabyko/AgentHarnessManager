@@ -172,6 +172,15 @@ private struct ProfileEditor: View {
                     Text("스킬 선택").font(.headline)
                     Text("\(selectedIDs.count)개 선택됨").font(.caption).foregroundStyle(.secondary)
                     Spacer()
+                    if store.profiles.contains(where: { $0.id != profile.id }) {
+                        Menu("다른 구성에서 가져오기") {
+                            ForEach(store.profiles.filter { $0.id != profile.id }) { source in
+                                Button("\(source.name) · 스킬 \(source.members.count)개") {
+                                    if let ids = store.profileMemberIDs(source.id) { selectedIDs.formUnion(ids) }
+                                }
+                            }
+                        }.disabled(!store.profilesAreEditable)
+                    }
                     if !selectedIDs.isEmpty { Button("선택 해제") { selectedIDs.removeAll() } }
                 }
                 TextField("스킬 검색", text: $query, prompt: Text("이름·에이전트·경로"))

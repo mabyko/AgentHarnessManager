@@ -114,6 +114,25 @@ struct AppStateCheck {
             let content = try String(contentsOf: home.appendingPathComponent(path + "/SKILL.md"), encoding: .utf8)
             precondition(content == body)
         }
-        print("PASS: profile create/edit/search/reload/delete, missing members preserved, invalid/corrupt state blocked, filters, fixed default paths, additional path edit/delete/reload, no skill file changes")
+        let sourceID = UUID()
+        precondition(restored.saveProfile(id: sourceID, name: "Shared skills", note: "", memberIDs: members))
+        let importedIDs = restored.profileMemberIDs(sourceID)!
+        precondition(importedIDs == members && importedIDs.union(members) == members)
+        let targetID = UUID()
+        precondition(restored.saveProfile(id: targetID, name: "Imported selection", note: "", memberIDs: importedIDs))
+        let importedReload = AppStore(defaults: defaults, home: home)
+        precondition(importedReload.profiles.first { $0.id == targetID }?.members.count == 2)
+        try files.moveItem(at: claudeFolder, to: hiddenFolder)
+        await restored.rescan()
+        precondition(restored.profileMemberIDs(sourceID) == nil && restored.profiles.first { $0.id == sourceID }?.members.count == 2)
+        try files.moveItem(at: hiddenFolder, to: claudeFolder)
+        await restored.rescan()
+        precondition(restored.saveProfile(id: sourceID, name: "Shared skills", note: "", memberIDs: [members.first!]))
+        precondition(restored.profiles.first { $0.id == targetID }?.members.count == 2, "Imports are snapshots")
+        restored.deleteProfile(sourceID)
+        precondition(restored.profileMemberIDs(sourceID) == nil && restored.profiles.first { $0.id == targetID }?.members.count == 2)
+        restored.deleteProfile(targetID)
+        precondition(AppStore(defaults: defaults, home: home).profiles.isEmpty)
+        print("PASS: profile create/edit/search/reload/delete, missing members preserved, invalid/corrupt state blocked, filters, fixed default paths, additional path edit/delete/reload, import profiles, reject missing members, preserve imported snapshots, no skill file changes")
     }
 }

@@ -4,15 +4,13 @@ import Foundation
 import SkillCore
 
 enum AppPage: String, CaseIterable, Identifiable {
-    case library, findings, profiles, groups, history
+    case library, findings, profiles
     var id: String { rawValue }
     var title: String {
         switch self {
         case .library: "스킬 목록"
         case .findings: "확인 필요"
         case .profiles: "작업 구성"
-        case .groups: "그룹"
-        case .history: "변경 기록"
         }
     }
     var symbol: String {
@@ -20,8 +18,6 @@ enum AppPage: String, CaseIterable, Identifiable {
         case .library: "square.stack.3d.up"
         case .findings: "exclamationmark.triangle"
         case .profiles: "slider.horizontal.3"
-        case .groups: "square.grid.2x2"
-        case .history: "clock.arrow.circlepath"
         }
     }
 }
@@ -169,6 +165,20 @@ final class AppStore {
         profiles = updated
         if selectedProfileID == id { selectedProfileID = updated.first?.id }
         profileMessage = nil
+    }
+
+    func profileMemberIDs(_ id: UUID) -> Set<String>? {
+        guard profilesAreEditable, let profile = profiles.first(where: { $0.id == id }) else {
+            profileMessage = "작업 구성을 불러올 수 없습니다. 스킬 목록과 구성을 확인해 주세요."
+            return nil
+        }
+        let ids = Set(profile.members.map(\.id))
+        guard ids.isSubset(of: Set(entries.map(\.id))) else {
+            profileMessage = "‘\(profile.name)’ 구성에 현재 목록에 없는 스킬이 있습니다. 해당 구성을 편집해 확인해 주세요."
+            return nil
+        }
+        profileMessage = nil
+        return ids
     }
 
     private func persistProfiles(_ updated: [WorkProfile]) -> Bool {

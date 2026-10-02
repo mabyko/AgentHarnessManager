@@ -109,13 +109,7 @@ struct ContentView: View {
                     .accessibilityAddTraits(store.rootFilterID == root.id ? .isSelected : [])
                 }
             }
-            Section("준비 중") {
-                ForEach([AppPage.groups, .history]) { page in
-                    Label(page.title, systemImage: page.symbol).foregroundStyle(.tertiary)
-                        .help("아직 제공하지 않는 기능입니다")
-                        .accessibilityLabel("\(page.title), 준비 중")
-                }
-            }
+
         }.listStyle(.sidebar)
     }
 
