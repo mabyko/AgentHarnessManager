@@ -1,0 +1,15 @@
+// Fresh checkouts use a local development identity, with no Apple team selected.
+AGENT_SKILL_MANAGER_BUNDLE_ID = forked.agentskillmanager.local
+AGENT_SKILL_MANAGER_BUNDLE_ID[config=Debug] = forked.agentskillmanager.local.dev
+APP_DISPLAY_NAME = 스킬 작업대
+APP_DISPLAY_NAME[config=Debug] = 스킬 작업대 Dev
+APP_PRODUCT_NAME = AgentSkillManager
+APP_PRODUCT_NAME[config=Debug] = AgentSkillManager Dev
+INFOPLIST_KEY_CFBundleDisplayName = $(APP_DISPLAY_NAME)
+INFOPLIST_KEY_CFBundleName = $(APP_DISPLAY_NAME)
+
+// Personal signing values belong in the ignored Local.xcconfig:
+// AGENT_SKILL_MANAGER_BUNDLE_ID = <your-personal-bundle-id>
+// AGENT_SKILL_MANAGER_BUNDLE_ID[config=Debug] = <your-personal-bundle-id>.dev
+// DEVELOPMENT_TEAM = <your-Apple-team-id>
+#include? "Local.xcconfig"

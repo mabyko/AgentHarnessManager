@@ -1,0 +1,53 @@
+name: AgentSkillManager
+options:
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+configs:
+  Debug: debug
+  Release: release
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+packages:
+  SkillCore:
+    path: Packages/SkillCore
+targets:
+  AgentSkillManager:
+    type: application
+    platform: macOS
+    sources: AgentSkillManager
+    dependencies:
+      - package: SkillCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(AGENT_SKILL_MANAGER_BUNDLE_ID)
+        PRODUCT_NAME: $(APP_PRODUCT_NAME)
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "4"
+      configs:
+        Debug:
+          ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon-Dev
+schemes:
+  AgentSkillManager:
+    build:
+      targets:
+        AgentSkillManager: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    archive:
+      config: Release

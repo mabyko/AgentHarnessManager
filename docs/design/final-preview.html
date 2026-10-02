@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>스킬 작업대 · 최종 후보 시안</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:var(--c-canvas);color:var(--c-text);font:13px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select{font:inherit;color:inherit}button{cursor:pointer}button:disabled{cursor:default;opacity:.55}a{color:var(--c-accent);text-underline-offset:4px}button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--c-accent);outline-offset:3px}h1,h2,h3,p{margin:0}h1{font-size:29px;letter-spacing:-1px;line-height:1.3;font-weight:650}h2{font-size:22px;letter-spacing:-.6px}h3{font-size:14px;font-weight:650}.icon{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;vertical-align:middle}.review{max-width:1440px;margin:auto;padding:26px 36px}.review-header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px;color:var(--c-muted);font-size:12px}.review-header strong{color:var(--c-text);font-weight:550}.review-links{display:flex;align-items:center;gap:18px}.review-header .eyebrow{margin-top:2px}.window{height:min(844px,calc(100dvh - 164px));min-height:560px;display:grid;grid-template-columns:190px minmax(0,1fr);border:1px solid var(--c-border);border-radius:14px;overflow:hidden;background:var(--c-surface);box-shadow:0 24px 80px #00000012}.sidebar{background:var(--c-sidebar);padding:28px 16px 18px;display:flex;flex-direction:column;border-right:1px solid var(--c-border);min-height:0;overflow:auto}.brand{display:flex;gap:10px;align-items:center;padding:0 8px;margin-bottom:36px;font-weight:650;font-size:16px;letter-spacing:-.4px}.brand-mark{width:30px;height:30px;display:grid;place-items:center;border:1px solid var(--c-border);border-radius:8px;color:var(--c-text)}.nav-item{border:0;background:transparent;width:100%;display:flex;align-items:center;gap:10px;text-align:left;padding:10px;margin:3px 0;border-radius:7px;color:var(--c-muted)}.nav-item:hover{background:var(--c-raised)}.nav-item[aria-current=page]{background:var(--c-selection);color:var(--c-accent);font-weight:650}.nav-item .count{margin-left:auto;font-variant-numeric:tabular-nums}.side-label{font-size:11px;color:var(--c-muted);margin:28px 10px 9px;letter-spacing:.4px}.location-summary{padding:8px 10px;font-size:12px;color:var(--c-muted);display:flex;gap:9px;align-items:center}.side-footer{margin-top:auto;padding:22px 10px 0;color:var(--c-muted);font-size:11px}.side-footer strong{display:block;color:var(--c-text);font-size:12px;font-weight:500;margin-bottom:3px}.main{min-width:0;min-height:0;display:flex;flex-direction:column}.toolbar{display:flex;align-items:center;gap:10px;padding:17px 28px;border-bottom:1px solid var(--c-border);min-height:69px}.context{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--c-muted)}.context strong{font-weight:550;color:var(--c-text)}.toolbar label{font-size:12px;color:var(--c-muted)}.toolbar select{background:var(--c-surface);border:1px solid var(--c-border);padding:6px 10px;border-radius:6px;max-width:170px}.search{display:flex;align-items:center;gap:7px;margin-left:auto;border:1px solid var(--c-border);border-radius:7px;background:var(--c-raised);padding:6px 10px;max-width:240px}.search input{width:160px;border:0;background:transparent;min-width:0}.search input::placeholder{color:var(--c-muted)}.search kbd{font:11px -apple-system,sans-serif}.button{display:inline-flex;align-items:center;justify-content:center;gap:7px;background:var(--c-surface);border:1px solid var(--c-border);border-radius:7px;padding:7px 12px;min-height:32px;font-weight:500}.button.primary{background:var(--c-accent);color:var(--c-onAccent);border-color:var(--c-accent)}.button.small{padding:5px 9px;font-size:12px}.button:hover:not(:disabled){filter:brightness(.97)}.mobile-sidebar{display:none}.content{overflow:auto;padding:28px 36px 20px;min-height:0;flex:1;scroll-padding:20px}.list-head{margin-bottom:18px}.list-head p{color:var(--c-muted);margin-top:7px}.section-kicker{display:flex;align-items:center;gap:10px;font-size:11px;letter-spacing:1px;color:var(--c-muted);margin-bottom:9px}.section-kicker:before{content:"";height:1px;width:24px;background:var(--c-accent)}.headline{display:flex;justify-content:space-between;align-items:center;gap:14px}.pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;line-height:1.5;padding:3px 8px;border-radius:5px;background:var(--c-raised);color:var(--c-muted);white-space:nowrap}.pill.success{background:var(--c-successSurface);color:var(--c-success)}.pill.warning{background:var(--c-warningSurface);color:var(--c-warning)}.profile-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:20px}.profile-choice{text-align:left;padding:16px;border:1px solid var(--c-border);border-radius:9px;background:var(--c-surface);min-width:0;position:relative}.profile-choice[aria-pressed=true]{background:var(--c-selection);border-color:var(--c-accent)}.profile-choice .choice-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;color:var(--c-muted);font-size:11px}.profile-choice .choice-title{display:block;font-weight:600;font-size:17px;margin-bottom:4px;letter-spacing:-.3px}.profile-choice .choice-desc{display:block;color:var(--c-muted);font-size:12px;margin-bottom:8px}.choice-state{font-size:12px;color:var(--c-muted);display:flex;gap:6px;align-items:center}.profile-sheet{border:1px solid var(--c-border);border-radius:10px;overflow:hidden}.profile-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 24px;border-bottom:1px solid var(--c-border)}.profile-heading p{color:var(--c-muted);font-size:12px;margin-top:4px}.profile-heading h2{font-size:18px}.scope-note{background:var(--c-raised);padding:11px 24px;display:flex;justify-content:space-between;gap:12px;color:var(--c-muted);font-size:12px;flex-wrap:wrap}.scope-note strong{color:var(--c-text);font-weight:500}.target-list{padding:0 24px;display:grid;grid-template-columns:1fr 1fr;column-gap:24px}.target-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:18px;padding:10px 0;border-bottom:1px solid var(--c-border)}.target-row:last-child{border:0}.target-row strong{display:block;font-weight:550;font-size:12px;overflow-wrap:anywhere}.target-row small{color:var(--c-muted);font-size:11px}.target-state{display:none}.target-name{display:block;background:transparent;border:0;padding:0;text-align:left;font-weight:550}.target-name:hover{text-decoration:underline;text-underline-offset:3px}.target-row .entry-path{font-size:11px}.target-row:nth-last-child(-n+2){border:0}.target-foot{padding:12px 24px;border-top:1px solid var(--c-border);font-size:12px;color:var(--c-muted);display:flex;gap:9px;align-items:flex-start}.target-foot .icon{width:15px;margin-top:1px}.inline-actions{display:flex;gap:8px;flex-wrap:wrap}.tiles{display:none;gap:6px;flex-wrap:wrap;padding:0 0 18px}.window[data-view=library] .tiles{display:flex}.window[data-view=library] .list-head{margin-bottom:14px}.window[data-view=library] .content{padding-top:22px}.tile{display:flex;align-items:center;gap:7px;padding:5px 10px;background:transparent;color:var(--c-muted);border:1px solid var(--c-border);border-radius:6px;font-size:12px}.tile.selected{background:var(--c-selection);color:var(--c-accent);border-color:var(--c-accent)}.tile-top{display:flex;align-items:center;gap:6px}.tile-top .icon{display:none}.tile-top strong{font-weight:500}.tile-label{order:-1}.library-columns,.library-entry{display:grid;grid-template-columns:minmax(180px,1.6fr) minmax(150px,1.2fr) minmax(100px,.75fr) 28px;gap:18px;align-items:center}.library-columns{padding:10px 14px;color:var(--c-muted);font-size:11px;border-bottom:1px solid var(--c-border);background:var(--c-raised);border-radius:7px 7px 0 0}.library-entry{width:100%;padding:15px 14px;text-align:left;border:0;border-bottom:1px solid var(--c-border);background:transparent;min-height:80px}.library-entry:hover,.library-entry[aria-pressed=true]{background:var(--c-selection)}.library-name{display:flex;gap:12px;align-items:flex-start;min-width:0}.entry-icon{width:29px;height:29px;display:grid;place-items:center;background:var(--c-raised);border:1px solid var(--c-border);border-radius:7px;color:var(--c-muted);flex-shrink:0}.entry-name{font-weight:550;display:block;overflow-wrap:anywhere}.entry-description{font-size:12px;color:var(--c-muted);display:block;margin-top:3px}.entry-path{display:block;font-size:11px;color:var(--c-muted);margin-top:3px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.entry-location{font-size:12px}.status{display:inline-flex;align-items:center;gap:7px;color:var(--c-success);font-size:12px}.status.off{color:var(--c-muted)}.status.unknown{color:var(--c-warning)}.dot{width:5px;height:5px;border-radius:50%;background:currentColor}.entry-arrow{color:var(--c-muted);font-size:16px}.notice{padding:12px 28px;border-top:1px solid var(--c-border);display:flex;justify-content:space-between;gap:12px;color:var(--c-muted);font-size:11px;background:var(--c-raised)}.global-status{min-height:20px;margin:13px 0;color:var(--c-accent);font-size:12px}.review-footer{display:flex;justify-content:space-between;gap:16px;font-size:12px;color:var(--c-muted)}.review-footer p{max-width:750px}.empty{padding:40px 24px;text-align:center;color:var(--c-muted)}.empty strong{display:block;color:var(--c-text);margin-bottom:5px}.entry{display:flex;align-items:center;gap:12px;width:100%;padding:18px;border:1px solid var(--c-border);border-radius:8px;background:var(--c-surface);text-align:left;margin-bottom:10px}.entry.selected{background:var(--c-selection);border-color:var(--c-accent)}.entry-text{min-width:0}.entry-meta{font-size:12px;color:var(--c-muted);display:block}.card{padding:16px 18px;border:1px solid var(--c-border);border-radius:8px;background:var(--c-raised);margin:12px 0}.card h3{margin:0 0 5px}.card p{color:var(--c-muted);font-size:12px;margin-top:5px}.card.warning{background:var(--c-warningSurface);border-color:var(--c-warning);color:var(--c-warning)}.card.warning p{color:inherit}.card.error{background:var(--c-dangerSurface);border-color:var(--c-danger);color:var(--c-danger)}.card.error p{color:inherit}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.subtle{color:var(--c-muted)}.actions{margin:18px 0}.detail-title{display:flex;gap:12px;align-items:center;margin-bottom:12px}.detail-title h2{overflow-wrap:anywhere}.detail-title p{color:var(--c-muted);font-size:12px}.large-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:9px;background:var(--c-selection);color:var(--c-accent)}.detail h3{margin:24px 0 10px}.detail>.card h3{margin:0 0 6px}.detail p{color:var(--c-muted);margin:8px 0}.member-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--c-border)}.member-row:last-child{border:0}.kv{display:grid;grid-template-columns:86px minmax(0,1fr);gap:12px;font-size:12px;margin:18px 0}.kv dt{color:var(--c-muted)}.kv dd{margin:0;overflow-wrap:anywhere}.path,pre{font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}pre{padding:16px;background:var(--c-raised);border:1px solid var(--c-border);border-radius:7px}dialog{width:min(780px,calc(100vw - 48px));max-height:88vh;border:1px solid var(--c-border);border-radius:13px;padding:0;color:var(--c-text);background:var(--c-surface);box-shadow:0 28px 100px #00000040}dialog::backdrop{background:#00000066}.sheet-body{padding:28px 32px;max-height:calc(88vh - 76px);overflow:auto;scroll-padding:16px}.sheet-body>h2{margin-bottom:8px;font-size:23px}.sheet-body p{color:var(--c-muted);font-size:12px;margin:8px 0}.sheet-footer{display:flex;justify-content:flex-end;align-items:center;gap:8px;background:var(--c-raised);border-top:1px solid var(--c-border);padding:16px 28px}.sheet-footer>span{margin-right:auto;font-size:12px;color:var(--c-muted)}.change-row{padding:16px 0;border-bottom:1px solid var(--c-border);display:flex;gap:14px;align-items:flex-start}.change-row strong{font-weight:550}.change-row .path{color:var(--c-muted);font-size:11px;margin-top:8px}.change-label{background:var(--c-successSurface);color:var(--c-success);padding:4px 8px;border-radius:5px;font-size:12px;white-space:nowrap}.change-label.off{background:var(--c-warningSurface);color:var(--c-warning)}.sheet-status{margin-top:16px;padding:12px;background:var(--c-raised);border-radius:7px;font-size:12px;color:var(--c-muted)}.review-tools{margin:16px 0 0;padding-top:16px;border-top:1px solid var(--c-border)}.review-tools summary{cursor:pointer;font-size:12px;color:var(--c-muted)}.review-tools .button{margin-top:10px}.recovery-pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px}.recovery-pair .card{margin:0}.recovery-pair .path{margin-top:10px}.recovery-actions{margin-top:20px;padding-top:16px;border-top:1px solid var(--c-border);display:flex;justify-content:space-between;gap:12px}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}[hidden]{display:none!important}
+@media(max-width:1180px){.review{padding:20px}.content{padding:28px 24px}.toolbar{padding:15px 22px}.context .context-tail{display:none}.tiles{padding-left:0}.library-columns,.library-entry{gap:12px;grid-template-columns:minmax(160px,1.4fr) minmax(140px,1fr) 102px 16px}.profile-choice{padding:15px}}
+@media(max-width:1000px){.window{grid-template-columns:1fr;position:relative}.sidebar{display:none}.mobile-sidebar{display:inline-flex}.window.sidebar-open .sidebar{display:flex;position:absolute;inset:0 auto 0 0;width:190px;z-index:2;box-shadow:12px 0 35px #00000025}.window.sidebar-open .main{padding-left:190px}.toolbar{flex-wrap:wrap}.search{max-width:215px}.search input{width:135px}.review-links a{display:none}.profile-choices{gap:8px}.profile-choice .choice-desc{min-height:36px}.window.sidebar-open .library-columns,.window.sidebar-open .library-entry{grid-template-columns:minmax(150px,1fr) 120px 16px}.window.sidebar-open .library-columns>:nth-child(2),.window.sidebar-open .library-entry>:nth-child(2){display:none}}
+@media(max-width:720px){.review{padding:14px 10px}.review-header{align-items:flex-start}.review-header .eyebrow{max-width:220px}.window{height:calc(100dvh - 120px);min-height:660px}.toolbar{padding:12px 16px;gap:8px}.context{width:calc(100% - 48px)}.search{max-width:none;flex:1}.search input{width:100%}.toolbar label[for=scope]{display:none}.content{padding:24px 16px}.tiles{padding-left:0;padding-right:0}.profile-choices{grid-template-columns:1fr;gap:8px}.profile-choice{display:grid;grid-template-columns:1fr auto;gap:3px 12px;padding:13px 15px}.profile-choice .choice-top{display:none}.profile-choice .choice-title{font-size:15px;margin:0}.profile-choice .choice-desc{grid-column:1;min-height:0;margin:0}.choice-state{grid-row:1/3;grid-column:2;font-size:11px}.profile-heading,.scope-note{padding:16px}.profile-heading{align-items:flex-start;flex-wrap:wrap}.target-list{padding:0 16px;grid-template-columns:1fr}.target-row{gap:8px;grid-template-columns:minmax(0,1fr) auto}.target-state{display:none}.target-foot{padding:12px 16px}.library-columns,.library-entry{grid-template-columns:minmax(130px,1fr) 105px 16px;gap:8px}.library-columns>:nth-child(2),.library-entry>:nth-child(2){display:none}.entry-description{display:none}.notice{padding:10px 16px;flex-wrap:wrap}.notice>span:last-child{display:none}.review-footer{flex-direction:column}.review-links{gap:8px}.review-header strong{font-size:12px}.sheet-body{padding:22px 20px}.sheet-footer{padding:14px 20px;flex-wrap:wrap}.sheet-footer>span{flex-basis:100%}.recovery-pair{grid-template-columns:1fr}.recovery-actions{flex-wrap:wrap}.window.sidebar-open .main{padding-left:0}}
+@media(prefers-reduced-motion:no-preference){button{transition:background-color 120ms ease,border-color 120ms ease}}@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.origin-bar{display:none;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 16px;color:var(--c-muted);font-size:12px}.window[data-view=library] .origin-bar{display:flex}.origin-bar select{background:var(--c-surface);border:1px solid var(--c-border);padding:7px 10px;border-radius:6px;max-width:100%}.origin-bar p{flex-basis:100%;font-size:11px}.origin-name{display:block;font-size:11px;color:var(--c-muted);margin-top:5px;overflow-wrap:anywhere}.compact-location{display:none}.target-change{background:var(--c-warningSurface);color:var(--c-warning)}dialog[open]{display:flex;flex-direction:column}.sheet-body{flex:1;min-height:0;max-height:none}.sheet-footer{flex-shrink:0}
+@media(max-width:1000px){.window.sidebar-open .compact-location{display:block}}
+@media(max-width:720px){.compact-location{display:block}}
+</style></head><body>
+<svg hidden aria-hidden="true"><defs>
+<symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></symbol>
+<symbol id="i-power" viewBox="0 0 24 24"><path d="M12 2v10M6 5a9 9 0 1 0 12 0"/></symbol>
+<symbol id="i-box" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="15" rx="2"/><path d="M2 3h20v3H2zM9 11h6"/></symbol>
+<symbol id="i-warning" viewBox="0 0 24 24"><path d="m12 3 10 18H2L12 3Zm0 6v5m0 3v.1"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4m-4 5v2"/></symbol>
+<symbol id="i-star" viewBox="0 0 24 24"><path d="m12 2 3 6.5 7 1-5 5 1 7-6-3.5L6 21l1-6.5-5-5 7-1L12 2Z"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 6 6"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 8a8 8 0 1 0 0 8M20 3v5h-5"/></symbol>
+<symbol id="i-history" viewBox="0 0 24 24"><path d="M3 11a9 9 0 1 1 2 7M3 4v7h7m2-5v6l4 2"/></symbol>
+<symbol id="i-profile" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="m9 15 6-6M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 1 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></symbol>
+<symbol id="i-document" viewBox="0 0 24 24"><path d="M5 3h9l5 5v13H5V3Zm9 0v6h5M8 13h8M8 17h6"/></symbol>
+<symbol id="i-sidebar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 6"/></symbol>
+</defs></svg>
+<main class="review">
+<header class="review-header"><div><strong>Agent Skill Manager / Design 01</strong><p class="eyebrow">차분한 작업대 · 최종 후보 · 브라우저 검토용</p></div><div class="review-links"><a href="reference-board.html">레퍼런스</a><a href="../design-system.md">설계</a><button class="button small" id="theme" aria-pressed="false">어두운 모드</button></div></header>
+<section class="window" id="app-window" aria-label="스킬 작업대 화면 시안">
+<aside class="sidebar" aria-label="주요 화면"><div class="brand"><span class="brand-mark" aria-hidden="true">/≡</span>스킬 작업대</div><nav aria-label="주요 화면">
+<button class="nav-item" data-route="profiles"><svg class="icon" aria-hidden="true"><use href="#i-profile"/></svg>작업 구성</button>
+<button class="nav-item" data-route="library"><svg class="icon" aria-hidden="true"><use href="#i-layers"/></svg>설치 목록</button>
+<button class="nav-item" data-route="groups"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg>그룹</button>
+<p class="side-label">확인과 복구</p>
+<button class="nav-item" data-route="findings"><svg class="icon" aria-hidden="true"><use href="#i-warning"/></svg>확인 필요<span class="count">2</span></button>
+<button class="nav-item" data-route="history"><svg class="icon" aria-hidden="true"><use href="#i-history"/></svg>변경 기록</button>
+</nav><p class="side-label">발견 위치 · 예시</p><div class="location-summary"><svg class="icon" aria-hidden="true"><use href="#i-box"/></svg>사용자 전역</div><div class="location-summary"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>제공자 카탈로그</div><div class="side-footer"><strong>이 Mac에서 관리</strong>Codex + Claude Code<br>로컬 파일과 작업 구성</div></aside>
+<div class="main"><div class="toolbar"><button class="button small mobile-sidebar" id="sidebar-toggle" aria-expanded="false" aria-label="사이드바 열기"><svg class="icon" aria-hidden="true"><use href="#i-sidebar"/></svg></button><div class="context"><svg class="icon" aria-hidden="true"><use href="#i-box"/></svg><strong>이 Mac</strong><span class="context-tail">/ 사용자 전역</span></div><label for="scope">조회</label><select id="scope"><option value="all">모든 에이전트</option><option value="Codex">Codex</option><option value="Claude Code">Claude Code</option></select><label class="search" for="search"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><span class="sr-only">현재 화면에서 검색</span><input id="search" type="search" placeholder="프로필 검색" autocomplete="off"><kbd aria-hidden="true">⌘F</kbd></label><button class="button small" id="rescan" aria-label="다시 검사"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg></button></div>
+<div class="content"><header class="list-head" id="list-head"></header><div class="origin-bar"><label for="origin-filter">출처</label><select id="origin-filter" aria-describedby="origin-note"><option value="all">모든 출처</option></select><p id="origin-note">등록 위치에서 발견한 설치 항목 수입니다. 출처 연결은 예시이며 원격 전체 목록을 조회하지 않습니다.</p></div><div id="tiles" class="tiles" aria-label="설치 목록 필터"></div><div id="list-body"></div></div>
+<div class="notice"><span>조회 필터와 프로필의 관리 범위는 별개입니다.</span><span>예시 데이터 · 실제 파일 변경 없음</span></div></div>
+</section>
+<p class="global-status" id="status" role="status" aria-live="polite" aria-atomic="true">작업 구성을 선택하고 변경 검토를 열어보세요. 예시 데이터만 바뀝니다.</p>
+<footer class="review-footer"><p>검토 포인트: 작업 구성 → 설치 범위 확인 → 변경 검토. 고정 보호와 복구 충돌도 같은 흐름에서 확인합니다.</p><a href="preview.html">이전 동작 검토 시안 ↗</a></footer></main>
+<dialog id="detail-dialog" aria-labelledby="detail-title"><div class="sheet-body"><p class="section-kicker" id="detail-title">항목 확인</p><section class="detail" id="detail"></section></div><div class="sheet-footer"><button class="button" id="close-detail" autofocus>닫기</button></div></dialog>
+<dialog id="plan-dialog" aria-labelledby="plan-title"><div class="sheet-body"><p class="section-kicker">변경 검토</p><h2 id="plan-title"></h2><div id="plan-body"></div></div><div class="sheet-footer"><span>전체 계획을 확인한 뒤 적용</span><button class="button" id="cancel-plan" autofocus>취소</button><button class="button" id="refresh-plan" hidden>다시 확인</button><button class="button primary" id="apply-plan">예시 데이터에 적용</button></div></dialog>
+<script id="design-tokens" type="application/json">{
+  "version": 1,
+  "platform": "macOS",
+  "units": "pt for native layout; px equivalents for review preview",
+  "primitive": {
+    "space": {
+      "xs": 4,
+      "sm": 8,
+      "md": 12,
+      "lg": 16,
+      "xl": 24,
+      "xxl": 32
+    },
+    "radius": {
+      "sm": 8,
+      "md": 12,
+      "lg": 16
+    },
+    "fontSize": {
+      "caption": 12,
+      "body": 13,
+      "section": 15,
+      "title": 18,
+      "page": 22,
+      "count": 24
+    },
+    "motion": {
+      "feedback": 120,
+      "state": 180
+    },
+    "color": {
+      "light": {
+        "surface": "#FAFAFA",
+        "sidebar": "#F3F3F3",
+        "canvas": "#ECECEC",
+        "raised": "#F5F5F5",
+        "text": "#242424",
+        "muted": "#626262",
+        "border": "#DADADA",
+        "accent": "#3059C7",
+        "onAccent": "#FFFFFF",
+        "selection": "#EFEFEF",
+        "success": "#356647",
+        "successSurface": "#EFF5F0",
+        "warning": "#805520",
+        "warningSurface": "#F7EEDC",
+        "danger": "#9E372D",
+        "dangerSurface": "#FAEAE7",
+        "purple": "#655075",
+        "purpleSurface": "#F0EAF3"
+      },
+      "dark": {
+        "surface": "#202020",
+        "sidebar": "#191919",
+        "canvas": "#121212",
+        "raised": "#292929",
+        "text": "#F2F2F2",
+        "muted": "#B9B9B9",
+        "border": "#494949",
+        "accent": "#A9BCFF",
+        "onAccent": "#18213B",
+        "selection": "#303030",
+        "success": "#A1C6AD",
+        "successSurface": "#29352D",
+        "warning": "#E6C08D",
+        "warningSurface": "#413522",
+        "danger": "#F1ADA2",
+        "dangerSurface": "#462C29",
+        "purple": "#D3BDDF",
+        "purpleSurface": "#3C3044"
+      }
+    }
+  },
+  "semantic": {
+    "color": {
+      "surface": {
+        "reference": "primitive.color.$theme.surface",
+        "native": "NSColor.windowBackgroundColor"
+      },
+      "sidebar": {
+        "reference": "primitive.color.$theme.sidebar",
+        "native": "system sidebar appearance"
+      },
+      "canvas": {
+        "reference": "primitive.color.$theme.canvas",
+        "native": "review preview only"
+      },
+      "raised": {
+        "reference": "primitive.color.$theme.raised",
+        "native": "system grouped content surface"
+      },
+      "text": {
+        "reference": "primitive.color.$theme.text",
+        "native": "Color.primary"
+      },
+      "muted": {
+        "reference": "primitive.color.$theme.muted",
+        "native": "Color.secondary"
+      },
+      "border": {
+        "reference": "primitive.color.$theme.border",
+        "native": "NSColor.separatorColor"
+      },
+      "accent": {
+        "reference": "primitive.color.$theme.accent",
+        "native": "Color.accentColor"
+      },
+      "onAccent": {
+        "reference": "primitive.color.$theme.onAccent",
+        "native": "system button foreground"
+      },
+      "selection": {
+        "reference": "primitive.color.$theme.selection",
+        "native": "system selection appearance"
+      },
+      "success": {
+        "reference": "primitive.color.$theme.success",
+        "native": "semantic success, paired label"
+      },
+      "successSurface": {
+        "reference": "primitive.color.$theme.successSurface",
+        "native": "semantic success surface"
+      },
+      "warning": {
+        "reference": "primitive.color.$theme.warning",
+        "native": "semantic warning, paired label"
+      },
+      "warningSurface": {
+        "reference": "primitive.color.$theme.warningSurface",
+        "native": "semantic warning surface"
+      },
+      "danger": {
+        "reference": "primitive.color.$theme.danger",
+        "native": "semantic error, paired label"
+      },
+      "dangerSurface": {
+        "reference": "primitive.color.$theme.dangerSurface",
+        "native": "semantic error surface"
+      },
+      "purple": {
+        "reference": "primitive.color.$theme.purple",
+        "native": "custom category color"
+      },
+      "purpleSurface": {
+        "reference": "primitive.color.$theme.purpleSurface",
+        "native": "custom category surface"
+      }
+    },
+    "space": {
+      "row": "primitive.space.md",
+      "card": "primitive.space.lg",
+      "section": "primitive.space.xl"
+    },
+    "radius": {
+      "control": "primitive.radius.sm",
+      "card": "primitive.radius.md"
+    }
+  },
+  "component": {
+    "tile": {
+      "radius": "semantic.radius.card",
+      "padding": "semantic.space.card",
+      "minHeight": 80
+    },
+    "row": {
+      "minHeight": 76,
+      "padding": "semantic.space.row"
+    },
+    "finding": {
+      "padding": "semantic.space.card",
+      "radius": "semantic.radius.card"
+    },
+    "layout": {
+      "sidebarWidth": 190,
+      "listWidth": 320,
+      "detailMinWidth": 440,
+      "collapseWidth": 1120
+    },
+    "sheet": {
+      "width": 780,
+      "padding": "semantic.space.section"
+    }
+  }
+}</script>
+<script src="preview-model.js"></script><script src="preview-controller.js"></script>
+<script>
+// Presentation-only candidate. All planning, stale guards and history use shared review rules.
+const referenceRender=render, referenceLibrary=drawLibrary, referenceGroups=drawGroups, referenceFindings=drawFindings, referenceHistory=drawHistory, referenceOpenPlan=openPlan;
+const screenTitles={library:['01 / LIBRARY','설치 목록','같은 이름도 위치가 다르면 별개의 설치 항목입니다.'],groups:['02 / ORGANIZE','그룹','분류를 바꿔도 파일은 이동하지 않습니다.'],findings:['03 / INSPECT','확인 필요','문제와 근거를 확인하고 다음 행동을 결정하세요.'],history:['04 / HISTORY','변경 기록','파일 변경의 결과와 되돌리기를 확인합니다.']};
+const titleHTML=(kicker,title,description,extra='')=>`<div class="section-kicker">${kicker}</div><div class="headline"><h1>${title}</h1>${extra}</div><p>${description}</p>`;
+render=function(reason='observe'){
+ $('app-window').setAttribute('data-view',route);
+ $('scope').disabled=route==='profiles'||route==='history';
+ $('scope').title=$('scope').disabled?'이 화면은 저장된 전체 구성을 보여줍니다. 설치 목록에서 조회 범위를 좁힐 수 있습니다.':'';
+ const origin=$('origin-filter').value||'all',scoped=entries.filter(inScope);
+ $('origin-filter').innerHTML='<option value="all">모든 출처</option>'+demoRepositories.map(repository=>`<option value="${repository.id}">${escapeHTML(repository.name)} · 설치 항목 ${scoped.filter(e=>repositoryFor(e)?.id===repository.id).length}개</option>`).join('')+`<option value="unknown">출처 미확인 · ${scoped.filter(e=>!repositoryFor(e)).length}개</option>`;
+ $('origin-filter').value=origin;
+ referenceRender(reason);
+};
+drawProfiles=function(){
+ const profiles=demoProfiles.filter(p=>matches(p.name+' '+p.description));
+ if(!profiles.some(p=>p.id===selectedProfile))selectedProfile=profiles[0]?.id;
+ $('list-head').innerHTML=titleHTML('YOUR WORK, YOUR SKILLS','작업 구성','할 일에 맞는 구성을 고르고, 파일을 바꾸기 전에 차이를 확인하세요.','<span class="pill">관리 위치 · 사용자 전역</span>');
+ const choices=profiles.map((p,index)=>{const plan=planChanges(entries,p,policy);return `<button class="profile-choice" data-profile="${p.id}" aria-pressed="${p.id===selectedProfile}"><span class="choice-top"><span>0${index+1} / PROFILE</span>${icon(p.id==='app'?'layers':p.id==='writing'?'document':'grid')}</span><span class="choice-title">${p.name}</span><span class="choice-desc">${p.description}</span><span class="choice-state">${icon(plan.blocked.length?'warning':plan.matched?'check':'profile')}${plan.blocked.length?'적용 불가':plan.matched?'구성 일치':plan.changes.length+'개 변경 필요'}</span></button>`;}).join('');
+ const p=demoProfiles.find(p=>p.id===selectedProfile);$('detail').innerHTML=$('detail-dialog').open?detailHTML(entries.find(e=>e.id===selected)):'';
+ if(!p){$('list-body').innerHTML='<div class="empty"><strong>일치하는 구성이 없습니다</strong>검색어를 바꿔보세요.</div>';return;}
+ const plan=planChanges(entries,p,policy),wanted=new Set([...p.desiredIds,...policy.pinnedIds.filter(id=>p.managedIds.includes(id))]);
+ $('list-body').innerHTML=`<div class="profile-choices">${choices}</div><section class="profile-sheet" aria-label="선택한 작업 구성"><div class="profile-heading"><div><h2>${p.name}</h2><p>사용 목표 ${wanted.size}개 · 관리 ${p.managedIds.length}개 · ${plan.blocked.length?'적용 불가':plan.matched?'예시 구성이 일치합니다':plan.changes.length+'개 변경 필요'}</p></div><button class="button primary" data-action="profile-plan" data-id="${p.id}">${icon('profile')}변경 검토${plan.changes.length?' · '+plan.changes.length:''}</button></div><div class="scope-note"><span><strong>관리 범위</strong>　Codex + Claude Code · 사용자 전역</span><span>범위 밖 ${plan.untouched.length}개 유지</span></div><div class="target-list">${entries.filter(e=>p.managedIds.includes(e.id)).map(e=>`<div class="target-row"><div><button class="target-name" data-action="inspect-entry" data-id="${e.id}" title="${escapeHTML(e.location)}" aria-label="${escapeHTML(e.name+' · '+e.agent+' · '+e.location)}"><strong>${escapeHTML(e.name)}</strong></button><small>${e.agent}${e.kind==='link'?' · 공유 원본의 링크':''}${policy.pinnedIds.includes(e.id)?' · 앱 전체 고정':''}</small><span class="entry-path">${escapeHTML(e.location)}</span></div><span class="target-state">현재 ${e.state==='on'?'발견됨':'보관됨'}</span><span class="pill ${e.state===(wanted.has(e.id)?'on':'off')?'':'target-change'}">${policy.pinnedIds.includes(e.id)?icon('lock'):''}${wanted.has(e.id)?e.state==='off'?icon('power')+'보관됨 → 복원':e.state==='on'?'유지':'미확인 · 복원 목표':e.state==='off'?'보관 유지':e.state==='on'?icon('box')+'발견됨 → 보관':'미확인 · 보관 목표'}</span></div>`).join('')}</div><div class="target-foot">${icon('lock')}<span>고정한 항목은 보호합니다. 구성 선택만으로 파일이 바뀌지는 않습니다.</span></div></section>`;
+};
+drawLibrary=function(reason){const visibleCount=referenceLibrary(reason);const [k,t,d]=screenTitles.library;$('list-head').innerHTML=titleHTML(k,t,d,`<span class="pill">표시 ${visibleCount}개 / 출처 범위 ${entries.filter(inScope).filter(inOriginScope).length}개</span>`);const buttons=$('list-body').querySelectorAll('[data-entry]');for(const button of buttons){const e=entries.find(e=>e.id===button.dataset.entry);button.className='library-entry';button.innerHTML=`<span class="library-name"><span class="entry-icon">${icon(e.kind==='link'?'link':e.writable?'document':'lock')}</span><span><span class="entry-name">${escapeHTML(e.name)}</span><span class="entry-description">${escapeHTML(e.description)}</span><span class="compact-location" aria-hidden="true">${escapeHTML(e.agent)}<span class="entry-path">${escapeHTML(e.location)}</span></span><span class="origin-name">${escapeHTML(repositoryFor(e)?.name??'출처 미확인')}${repositoryFor(e)?' · 사용자 지정 예시':''}</span></span></span><span class="entry-location">${e.agent}<span class="entry-path">${escapeHTML(e.location)}</span></span><span>${statusHTML(e)}<span class="entry-description">${!e.writable?'읽기 전용':policy.pinnedIds.includes(e.id)?'고정 보호':e.kind==='link'?'공유 원본 링크':'사용자 스킬'}</span></span><span class="entry-arrow" aria-hidden="true">↗</span>`;}if(buttons.length)$('list-body').insertAdjacentHTML('afterbegin','<div class="library-columns" aria-hidden="true"><span>스킬</span><span>에이전트 / 설치 위치</span><span>현재 상태</span><span></span></div>');};
+drawGroups=function(){referenceGroups();$('list-head').innerHTML=titleHTML(...screenTitles.groups);};
+drawFindings=function(reason){referenceFindings(reason);$('list-head').innerHTML=titleHTML(...screenTitles.findings);};
+drawHistory=function(){referenceHistory();$('list-head').innerHTML=titleHTML(...screenTitles.history,'<button class="button small" data-action="recovery-example">복구 충돌 예시</button>');};
+openPlan=function(profile,title,undoIndex=null){
+ detailReturnSelector=null;detailReturnRoute=null;
+ if($('detail-dialog').open)$('detail-dialog').close();referenceOpenPlan(profile,title,undoIndex);
+ const plan=planState.plan,on=plan.changes.filter(e=>e.target==='on').length,off=plan.changes.length-on;
+ $('plan-title').textContent=undoIndex===null?title.replace(' 프로필 적용',' 구성 적용'):title;
+ $('apply-plan').textContent=plan.blocked.length?'적용 불가':plan.changes.length?plan.changes.length+'개 예시 변경 적용':'변경 없음';
+ $('plan-body').innerHTML=`<p>복원 ${on}개 · 보관 ${off}개 · 유지 ${plan.retained.length}개</p><div class="card warning"><h3>${icon('warning')} 사용자 전역 위치에 영향을 줍니다</h3><p>이 항목을 사용하는 다른 프로젝트에도 영향이 있습니다. 현재 대화의 반영 상태는 미확인입니다.</p></div>${plan.blocked.map(b=>`<div class="card error" role="alert" data-reason-code="${escapeHTML(b.code)}"><h3>전체 적용이 차단됐습니다</h3><p>${escapeHTML(b.reason)}</p>${b.relatedIds.length?'<p>관련 항목: '+b.relatedIds.map(id=>escapeHTML(entries.find(e=>e.id===id)?.name??id)).join(', ')+'</p>':''}</div>`).join('')}${plan.changes.map(e=>`<div class="change-row"><span class="change-label ${e.target==='off'?'off':''}">${e.target==='on'?'복원':'보관'}</span><div><strong>${escapeHTML(e.name)}</strong><p>${e.agent} · ${e.kind==='link'?'링크 자체':'스킬 폴더'}</p><div class="path">출발　${escapeHTML(e.target==='off'?e.location:demoVaultPath(e))}<br>도착　${escapeHTML(e.target==='off'?demoVaultPath(e):e.location)}</div></div></div>`).join('')}<div class="sheet-status">${plan.blocked.length?'차단 이유를 해결한 뒤 새 계획을 검토하세요. 부분 적용은 하지 않습니다.':plan.retained.filter(e=>e.pinned).length+'개 고정 항목과 관리 범위 밖 '+plan.untouched.length+'개를 유지합니다.'}</div>${plan.changes.some(e=>e.sourceId||entries.some(other=>sourceEntryId(other,policy)===e.id))?'<div class="card"><h3>공유 원본과 링크를 함께 검토했습니다</h3><p>링크를 보관할 때에는 원본을 유지합니다. 원본과 링크를 함께 변경할 때에는 참조 관계에 맞는 순서로 처리합니다.</p></div>':''}<details class="review-tools"><summary>시안 검증 도구</summary><p>예시 데이터만 바뀝니다. 실제 파일 변경은 없습니다.</p><button class="button small" data-action="stale-example">외부 변경 재현</button></details>`;
+};
+function showRecoveryCandidate(){
+ $('detail-title').textContent='복구 충돌 예시';
+ $('detail').innerHTML=`<h2>복구를 멈췄습니다</h2><p>writing · 두 위치에 항목이 있어 자동 복구를 진행할 수 없습니다.</p><div class="card error"><h3>${icon('lock')} 두 항목을 모두 보존했습니다</h3><p>복구가 해결될 때까지 새 파일 변경이 차단됩니다. 조회는 계속할 수 있습니다.</p></div><div class="recovery-pair"><div class="card"><h3>원래 위치</h3><span class="pill warning">새 항목 있음</span><div class="path">~/.agents/skills/writing</div><p>현재 위치에 다른 항목이 있습니다.</p></div><div class="card"><h3>보관 위치</h3><span class="pill">기존 항목 있음</span><div class="path">${escapeHTML(demoVaultPath(entries.find(e=>e.id==='writing')))}</div><p>복구하려던 항목이 보관돼 있습니다.</p></div></div><div class="recovery-actions"><p>실제 앱에서는 두 위치를 확인하고 다시 검사합니다.</p><button class="button" data-action="history-back">예시 닫기</button></div>`;
+ if(!$('detail-dialog').open)$('detail-dialog').showModal();
+}
+let detailReturnSelector=null,detailReturnRoute=null;
+$('list-body').addEventListener('click',event=>{const button=event.target.closest('button');if(!button)return;if(button.dataset.entry||button.dataset.group||['select-related','inspect-entry'].includes(button.dataset.action)){detailReturnRoute=route;detailReturnSelector=button.dataset.entry?`[data-entry="${CSS.escape(button.dataset.entry)}"]`:button.dataset.group?`[data-group="${CSS.escape(button.dataset.group)}"]`:`[data-action="${button.dataset.action}"][data-id="${CSS.escape(button.dataset.id)}"]`;$('detail-title').textContent=route==='findings'?'검사 근거':button.dataset.group?'그룹 확인':'설치 항목 확인';if(!$('detail-dialog').open)$('detail-dialog').showModal();}});
+$('list-head').addEventListener('click',event=>{if(event.target.closest('[data-action="recovery-example"]'))setTimeout(showRecoveryCandidate,0);});
+$('detail').addEventListener('click',event=>{const action=event.target.closest('button')?.dataset.action;if(action==='history-back')$('detail-dialog').close();if(action==='recovery-example')setTimeout(showRecoveryCandidate,0);});
+$('close-detail').addEventListener('click',()=>$('detail-dialog').close());
+function restoreCandidateFocus(){
+ if($('plan-dialog').open||$('detail-dialog').open)return;
+ if(route===detailReturnRoute&&detailReturnSelector){const opener=document.querySelector(detailReturnSelector);if(opener){opener.focus();return;}}
+ const selector=route==='profiles'?`[data-action="profile-plan"][data-id="${CSS.escape(selectedProfile??'')}"]`:route==='groups'?`[data-group="${CSS.escape(selectedGroup??'')}"]`:route==='library'||route==='findings'?`[data-entry="${CSS.escape(selected??'')}"]`:`[data-route="${route}"]`;
+ (document.querySelector(selector)??document.querySelector(`[data-route="${route}"]`))?.focus();
+}
+$('detail-dialog').addEventListener('close',restoreCandidateFocus);$('plan-dialog').addEventListener('close',restoreCandidateFocus);
+route='profiles';setTheme(false);render();
+</script></body></html>
