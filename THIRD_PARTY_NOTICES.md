@@ -7,4 +7,4 @@ The current tree links to these screenshots rather than bundling copies. Earlier
 
 The app icons were generated for this project. Their source images and generation prompts are recorded in [the icon notes](docs/design/icons/README.md). Native screenshots and HTML prototypes are project materials; older screenshots show previous names, layouts, and development states.
 
-Codex, Claude Code, and other named products are referenced to describe compatibility and research. Agent Plugin Manager is an independent project and is not endorsed by their vendors.
+Codex, Claude Code, and other named products are referenced to describe compatibility and research. Agent Harness Manager is an independent project and is not endorsed by their vendors.

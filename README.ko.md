@@ -1,4 +1,4 @@
-# Agent Plugin Manager
+# Agent Harness Manager
 
 [English](README.md)
 
@@ -24,22 +24,22 @@
 
 macOS 26 이상, Swift 6.2 이상을 포함한 Xcode 26 이상이 필요합니다. 전체 Xcode 설치를 활성 개발자 경로로 선택해야 합니다. 외부 Swift 패키지 의존성은 없습니다. 디자인 검사에만 Node.js 22 이상이 필요합니다.
 
-저장소에 포함된 프로젝트를 열고 `AgentPluginManager` scheme을 선택해 실행합니다.
+저장소에 포함된 프로젝트를 열고 `AgentHarnessManager` scheme을 선택해 실행합니다.
 
 ```sh
-open AgentPluginManager.xcodeproj
+open AgentHarnessManager.xcodeproj
 ```
 
 저장소 루트에서 로컬 Release 앱을 빌드하고 실행하려면:
 
 ```sh
-xcodebuild -project AgentPluginManager.xcodeproj \
-  -scheme AgentPluginManager -configuration Release \
+xcodebuild -project AgentHarnessManager.xcodeproj \
+  -scheme AgentHarnessManager -configuration Release \
   -derivedDataPath build build
-open "build/Build/Products/Release/Agent Plugin Manager.app"
+open "build/Build/Products/Release/Agent Harness Manager.app"
 ```
 
-기본 빌드는 ad-hoc 서명을 사용하므로 Apple 팀 설정이 필요하지 않습니다. Debug 빌드는 별도의 `Agent Plugin Manager Dev.app`과 설정 저장 영역을 사용합니다. 위 명령은 로컬 빌드용이며 Developer ID 서명과 공증 배포는 아직 검증하지 않았습니다.
+기본 빌드는 ad-hoc 서명을 사용하므로 Apple 팀 설정이 필요하지 않습니다. Debug 빌드는 별도의 `Agent Harness Manager Dev.app`과 설정 저장 영역을 사용합니다. 위 명령은 로컬 빌드용이며 Developer ID 서명과 공증 배포는 아직 검증하지 않았습니다.
 
 생성된 Xcode 프로젝트를 저장소에 포함합니다. [project.yml](project.yml)을 변경해 프로젝트를 다시 생성할 때만 XcodeGen이 필요합니다.
 

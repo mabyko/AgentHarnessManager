@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "01C5775D1CB47C05F0C5B7A6"
-               BuildableName = "AgentPluginManager.app"
-               BlueprintName = "AgentPluginManager"
-               ReferencedContainer = "container:AgentPluginManager.xcodeproj">
+               BuildableName = "AgentHarnessManager.app"
+               BlueprintName = "AgentHarnessManager"
+               ReferencedContainer = "container:AgentHarnessManager.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -33,9 +33,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "01C5775D1CB47C05F0C5B7A6"
-            BuildableName = "AgentPluginManager.app"
-            BlueprintName = "AgentPluginManager"
-            ReferencedContainer = "container:AgentPluginManager.xcodeproj">
+            BuildableName = "AgentHarnessManager.app"
+            BlueprintName = "AgentHarnessManager"
+            ReferencedContainer = "container:AgentHarnessManager.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
       <Testables>
@@ -56,9 +56,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "01C5775D1CB47C05F0C5B7A6"
-            BuildableName = "AgentPluginManager.app"
-            BlueprintName = "AgentPluginManager"
-            ReferencedContainer = "container:AgentPluginManager.xcodeproj">
+            BuildableName = "AgentHarnessManager.app"
+            BlueprintName = "AgentHarnessManager"
+            ReferencedContainer = "container:AgentHarnessManager.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
       <CommandLineArguments>
@@ -75,9 +75,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "01C5775D1CB47C05F0C5B7A6"
-            BuildableName = "AgentPluginManager.app"
-            BlueprintName = "AgentPluginManager"
-            ReferencedContainer = "container:AgentPluginManager.xcodeproj">
+            BuildableName = "AgentHarnessManager.app"
+            BlueprintName = "AgentHarnessManager"
+            ReferencedContainer = "container:AgentHarnessManager.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
       <CommandLineArguments>

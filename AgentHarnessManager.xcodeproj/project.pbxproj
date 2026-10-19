@@ -14,13 +14,13 @@
 		857488910316F82A4D87E4D0 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B1CBE0CC988D699D3DC835E /* ContentView.swift */; };
 		AAE3CEF1B99CD6FC7BDC5E9D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E6E0E15DF0CC08520B21C5C5 /* Assets.xcassets */; };
 		DD7147C478728459D6B809DC /* SkillCore in Frameworks */ = {isa = PBXBuildFile; productRef = 6C859545C06B66412E96C1E0 /* SkillCore */; };
-		FC973A6DECD527DD94A7EC70 /* AgentPluginManagerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411729D44B73A9879EB88D8B /* AgentPluginManagerApp.swift */; };
+		FC973A6DECD527DD94A7EC70 /* AgentHarnessManagerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411729D44B73A9879EB88D8B /* AgentHarnessManagerApp.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		01A5394F1BC62BA8CEF16946 /* ProfilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesView.swift; sourceTree = "<group>"; };
-		1D893C0975ADE6112F1D11F3 /* AgentPluginManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentPluginManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		411729D44B73A9879EB88D8B /* AgentPluginManagerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentPluginManagerApp.swift; sourceTree = "<group>"; };
+		1D893C0975ADE6112F1D11F3 /* AgentHarnessManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentHarnessManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		411729D44B73A9879EB88D8B /* AgentHarnessManagerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentHarnessManagerApp.swift; sourceTree = "<group>"; };
 		44176E6A2D5F1095426D0421 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		50947EDD53EDB6A74C7C485E /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		6B1CBE0CC988D699D3DC835E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -42,10 +42,10 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		0A3CAE3F1A89D8D0788678C1 /* AgentPluginManager */ = {
+		0A3CAE3F1A89D8D0788678C1 /* AgentHarnessManager */ = {
 			isa = PBXGroup;
 			children = (
-				411729D44B73A9879EB88D8B /* AgentPluginManagerApp.swift */,
+				411729D44B73A9879EB88D8B /* AgentHarnessManagerApp.swift */,
 				50947EDD53EDB6A74C7C485E /* AppStore.swift */,
 				E6E0E15DF0CC08520B21C5C5 /* Assets.xcassets */,
 				6B1CBE0CC988D699D3DC835E /* ContentView.swift */,
@@ -53,7 +53,7 @@
 				7E1D4B59B25464C4814254D3 /* SettingsView.swift */,
 				44176E6A2D5F1095426D0421 /* Theme.swift */,
 			);
-			path = AgentPluginManager;
+			path = AgentHarnessManager;
 			sourceTree = "<group>";
 		};
 		38CB6B928320F6FFA8763D02 /* Config */ = {
@@ -67,7 +67,7 @@
 		4EB4ECC77574BAC15E8F8636 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				1D893C0975ADE6112F1D11F3 /* AgentPluginManager.app */,
+				1D893C0975ADE6112F1D11F3 /* AgentHarnessManager.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -83,7 +83,7 @@
 		CF319855D2ACA4FD920E2BF4 = {
 			isa = PBXGroup;
 			children = (
-				0A3CAE3F1A89D8D0788678C1 /* AgentPluginManager */,
+				0A3CAE3F1A89D8D0788678C1 /* AgentHarnessManager */,
 				38CB6B928320F6FFA8763D02 /* Config */,
 				664D4FC66271B7F24F9C1E19 /* Packages */,
 				4EB4ECC77574BAC15E8F8636 /* Products */,
@@ -93,9 +93,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		01C5775D1CB47C05F0C5B7A6 /* AgentPluginManager */ = {
+		01C5775D1CB47C05F0C5B7A6 /* AgentHarnessManager */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = ECFA9D1A9D11001FCCE0670D /* Build configuration list for PBXNativeTarget "AgentPluginManager" */;
+			buildConfigurationList = ECFA9D1A9D11001FCCE0670D /* Build configuration list for PBXNativeTarget "AgentHarnessManager" */;
 			buildPhases = (
 				772E63105F71CA63D97E4ECF /* Sources */,
 				2754D8AD7277C26B2B19D1C1 /* Resources */,
@@ -105,12 +105,12 @@
 			);
 			dependencies = (
 			);
-			name = AgentPluginManager;
+			name = AgentHarnessManager;
 			packageProductDependencies = (
 				6C859545C06B66412E96C1E0 /* SkillCore */,
 			);
-			productName = AgentPluginManager;
-			productReference = 1D893C0975ADE6112F1D11F3 /* AgentPluginManager.app */;
+			productName = AgentHarnessManager;
+			productReference = 1D893C0975ADE6112F1D11F3 /* AgentHarnessManager.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -127,7 +127,7 @@
 					};
 				};
 			};
-			buildConfigurationList = C937D518E301D958A9A2A200 /* Build configuration list for PBXProject "AgentPluginManager" */;
+			buildConfigurationList = C937D518E301D958A9A2A200 /* Build configuration list for PBXProject "AgentHarnessManager" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -144,7 +144,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				01C5775D1CB47C05F0C5B7A6 /* AgentPluginManager */,
+				01C5775D1CB47C05F0C5B7A6 /* AgentHarnessManager */,
 			);
 		};
 /* End PBXProject section */
@@ -165,7 +165,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FC973A6DECD527DD94A7EC70 /* AgentPluginManagerApp.swift in Sources */,
+				FC973A6DECD527DD94A7EC70 /* AgentHarnessManagerApp.swift in Sources */,
 				82F61AB2E78802480B22AD69 /* AppStore.swift in Sources */,
 				857488910316F82A4D87E4D0 /* ContentView.swift in Sources */,
 				2AB1585479B2410D06BAFB96 /* ProfilesView.swift in Sources */,
@@ -351,7 +351,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		C937D518E301D958A9A2A200 /* Build configuration list for PBXProject "AgentPluginManager" */ = {
+		C937D518E301D958A9A2A200 /* Build configuration list for PBXProject "AgentHarnessManager" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				563C5118BACA5B30D64CDCA1 /* Debug */,
@@ -360,7 +360,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		ECFA9D1A9D11001FCCE0670D /* Build configuration list for PBXNativeTarget "AgentPluginManager" */ = {
+		ECFA9D1A9D11001FCCE0670D /* Build configuration list for PBXNativeTarget "AgentHarnessManager" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				6DDC0E89CA10613D1601915E /* Debug */,

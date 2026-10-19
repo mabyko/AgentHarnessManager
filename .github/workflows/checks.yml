@@ -29,6 +29,6 @@ jobs:
         run: node scripts/check-design.mjs
       - name: Release build
         run: >-
-          xcodebuild -project AgentPluginManager.xcodeproj
-          -scheme AgentPluginManager -configuration Release
+          xcodebuild -project AgentHarnessManager.xcodeproj
+          -scheme AgentHarnessManager -configuration Release
           -derivedDataPath build CODE_SIGNING_ALLOWED=NO build

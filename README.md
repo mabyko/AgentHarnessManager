@@ -1,4 +1,4 @@
-# Agent Plugin Manager
+# Agent Harness Manager
 
 [한국어](README.ko.md)
 
@@ -24,22 +24,22 @@ Saving a configuration does **not** enable, disable, move, or delete skills. A d
 
 Requirements: macOS 26+, Xcode 26+ with Swift 6.2+, and the full Xcode installation selected as the active developer directory. There are no external Swift package dependencies. Node.js 22+ is needed only for the design checks.
 
-Open the checked-in project, select the `AgentPluginManager` scheme, and run:
+Open the checked-in project, select the `AgentHarnessManager` scheme, and run:
 
 ```sh
-open AgentPluginManager.xcodeproj
+open AgentHarnessManager.xcodeproj
 ```
 
 To build and launch a local Release app from the repository root:
 
 ```sh
-xcodebuild -project AgentPluginManager.xcodeproj \
-  -scheme AgentPluginManager -configuration Release \
+xcodebuild -project AgentHarnessManager.xcodeproj \
+  -scheme AgentHarnessManager -configuration Release \
   -derivedDataPath build build
-open "build/Build/Products/Release/Agent Plugin Manager.app"
+open "build/Build/Products/Release/Agent Harness Manager.app"
 ```
 
-The default build uses ad-hoc signing and requires no Apple team. Debug builds use a separate `Agent Plugin Manager Dev.app` and preferences domain. These instructions produce a local build; Developer ID signing and notarized distribution have not been verified.
+The default build uses ad-hoc signing and requires no Apple team. Debug builds use a separate `Agent Harness Manager Dev.app` and preferences domain. These instructions produce a local build; Developer ID signing and notarized distribution have not been verified.
 
 The generated Xcode project is included. XcodeGen is needed only when changing [project.yml](project.yml):
 

@@ -8,5 +8,5 @@ swiftc -swift-version 6 -emit-module -emit-library -module-name SkillCore \
     -emit-module-path "$check_dir/SkillCore.swiftmodule" -o "$check_dir/libSkillCore.dylib"
 swiftc -swift-version 6 -I "$check_dir" -L "$check_dir" -lSkillCore \
     -Xlinker -rpath -Xlinker "$check_dir" \
-    AgentPluginManager/AppStore.swift scripts/check-app-state.swift -o "$check_dir/check"
+    AgentHarnessManager/AppStore.swift scripts/check-app-state.swift -o "$check_dir/check"
 "$check_dir/check"

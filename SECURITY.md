@@ -1,6 +1,6 @@
 # Security
 
-Agent Plugin Manager is in early development. Security fixes target the current `main` branch; there are no separately maintained release branches yet.
+Agent Harness Manager is in early development. Security fixes target the current `main` branch; there are no separately maintained release branches yet.
 
 ## Reporting a vulnerability
 

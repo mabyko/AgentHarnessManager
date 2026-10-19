@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve Agent Plugin Manager. Bug reports, feature proposals, code, and documentation changes are welcome in English or Korean.
+Thanks for helping improve Agent Harness Manager. Bug reports, feature proposals, code, and documentation changes are welcome in English or Korean.
 
 ## Before making a change
 
@@ -10,7 +10,7 @@ For bugs, include your macOS and Xcode versions, build configuration, reproducti
 
 ## Development setup
 
-Use macOS 26+ and Xcode 26+ with Swift 6.2+. Open `AgentPluginManager.xcodeproj` and select the `AgentPluginManager` scheme. Debug builds have a separate app name, icon, and preferences domain from Release.
+Use macOS 26+ and Xcode 26+ with Swift 6.2+. Open `AgentHarnessManager.xcodeproj` and select the `AgentHarnessManager` scheme. Debug builds have a separate app name, icon, and preferences domain from Release.
 
 No Apple team is required for the default ad-hoc signing setup. To customize your local identity, create `Config/Local.xcconfig`, which is ignored by Git:
 
@@ -36,8 +36,8 @@ Run these from the repository root:
 swift test --package-path Packages/SkillCore
 scripts/check-app-state.sh
 node scripts/check-design.mjs
-xcodebuild -project AgentPluginManager.xcodeproj \
-  -scheme AgentPluginManager -configuration Release \
+xcodebuild -project AgentHarnessManager.xcodeproj \
+  -scheme AgentHarnessManager -configuration Release \
   -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
 ```
 

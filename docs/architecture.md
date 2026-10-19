@@ -1,4 +1,4 @@
-# Agent Plugin Manager 개발 아키텍처
+# Agent Harness Manager 개발 아키텍처
 
 한 macOS 앱에서 발견, 변경 계획, 실행, 복구를 처리합니다. 파일 변경은 하나의 모듈로 모아 메인 창과 메뉴 막대가 같은 규칙을 사용하게 합니다. 서버와 계정은 첫 버전의 요구에 포함되지 않습니다.
 
@@ -16,13 +16,13 @@
 
 ## 플러그인 중심 확장 방향
 
-2026-10-02 제품명은 **Agent Plugin Manager**로 확정했습니다. 전체 제품 방향은 [README](../README.md#roadmap)를 따르며 아래 스킬 발견·파일 이동·복구 계약은 현재 스킬 관리의 명세입니다. 제품명 변경만으로 `SkillEntry`를 모든 종류의 관리 항목으로 바꾸거나 현 파일 이동 경로에 다른 종류를 추가하지 않습니다.
+2026-10-02 제품명은 **Agent Harness Manager**로 확정했습니다. 전체 제품 방향은 [README](../README.md#roadmap)를 따르며 아래 스킬 발견·파일 이동·복구 계약은 현재 스킬 관리의 명세입니다. 제품명 변경만으로 `SkillEntry`를 모든 종류의 관리 항목으로 바꾸거나 현 파일 이동 경로에 다른 종류를 추가하지 않습니다.
 
 플러그인 패키지와 포함 기능의 관계는 매니페스트 또는 공식 설치 기록으로 확인합니다. 출처 저장소·패키지 소속·설치 위치·관리 주체를 별개로 유지합니다. 단독 스킬과 MCP·훅·지침은 원래 종류로 조회하며 패키지로 변환하지 않습니다. 제공자 관리 플러그인의 설치·갱신·활성 변경은 해당 에이전트의 공식 방법을 검증한 뒤 별도 계획으로 연결합니다. 현재 읽기 전용 캐시 보호는 그때까지 유지하고 플러그인 내부 파일을 개별 스킬처럼 보관하지 않습니다.
 
 지원은 에이전트와 종류별로 추가합니다. 발견 규칙, 지원 작업, 패키지 형식, 상태 확인과 재반영 방법을 각각 검증하며 다른 에이전트가 같은 플러그인 형식을 채택할 것이라고 가정하지 않습니다. 실제 두 번째 지원 구현이 필요해질 때 공통 부분을 추출하며 지금 범용 플러그인 프로토콜이나 실행 모듈을 만들지 않습니다. 지침은 파일별 로딩·충돌 규칙을 별도로 확인하고 실행 루프는 관리하지 않습니다.
 
-프로젝트와 scheme 이름은 `AgentPluginManager`로 변경했습니다. 기존 구성·경로 설정을 보존하기 위해 Bundle ID와 UserDefaults 도메인은 이전 값을 유지합니다. 개인 서명 설정으로 Bundle ID를 바꾸면 설정 저장 영역도 달라집니다.
+프로젝트와 scheme 이름은 `AgentHarnessManager`로 변경했습니다. 기존 구성·경로 설정을 보존하기 위해 Bundle ID와 UserDefaults 도메인은 이전 값을 유지합니다. 개인 서명 설정으로 Bundle ID를 바꾸면 설정 저장 영역도 달라집니다.
 
 ## 앱 구성
 
@@ -200,7 +200,7 @@ Foundation의 [파일 이동 문서](https://developer.apple.com/documentation/f
 ## 영속화와 복구
 
 ```text
-Application Support/AgentPluginManager/
+Application Support/AgentHarnessManager/
   state.json                 등록 위치, 항목 ID, 출처 저장소·기록, 그룹, 프로필, 전역 고정, 즐겨찾기, lastAppliedOperationID
   operations/<UUID>.json     계획과 이동별 진행 상태
   backups/<UUID>/            편집 기능 도입 시 원본 보존
@@ -275,7 +275,7 @@ Codex는 변경을 자동 감지하며 보이지 않을 때 재시작을 안내�
 
 ```text
 App/
-  AgentPluginManagerApp.swift
+  AgentHarnessManagerApp.swift
   AppStore.swift
   LibraryView.swift
   SkillDetailView.swift

@@ -5,8 +5,8 @@
 - [Release 원본](release-master.png)
 - [개발용 원본](dev-master.png): 동일한 형태에 주황색 D 표시를 추가했다.
 - [작은 크기 비교](size-preview.png): 16·32·64 px와 큰 미리보기.
-- [Release AppIcon](../../../AgentPluginManager/Assets.xcassets/AppIcon.appiconset)
-- [개발용 AppIcon-Dev](../../../AgentPluginManager/Assets.xcassets/AppIcon-Dev.appiconset)
+- [Release AppIcon](../../../AgentHarnessManager/Assets.xcassets/AppIcon.appiconset)
+- [개발용 AppIcon-Dev](../../../AgentHarnessManager/Assets.xcassets/AppIcon-Dev.appiconset)
 
 두 빌드의 Bundle ID가 다르므로 아이콘을 구분한다. project.yml의 ASSETCATALOG_COMPILER_APPICON_NAME은 기본 AppIcon, Debug는 AppIcon-Dev다. 기존 아이콘 자산은 없었다. macOS 16·32·128·256·512 pt의 1x/2x 슬롯은 [Apple의 Asset Catalog Format Reference](https://developer.apple.com/library/archive/documentation/Xcode/Reference/xcode_ref-Asset_Catalog_Format/AppIconType.html)에 맞추고, 설치된 Xcode 27의 actool로 두 구성의 컴파일을 확인했다.
 

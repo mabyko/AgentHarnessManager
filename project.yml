@@ -1,4 +1,4 @@
-name: AgentPluginManager
+name: AgentHarnessManager
 options:
   deploymentTarget:
     macOS: "26.0"
@@ -17,10 +17,10 @@ packages:
   SkillCore:
     path: Packages/SkillCore
 targets:
-  AgentPluginManager:
+  AgentHarnessManager:
     type: application
     platform: macOS
-    sources: AgentPluginManager
+    sources: AgentHarnessManager
     dependencies:
       - package: SkillCore
     settings:
@@ -41,10 +41,10 @@ targets:
         Debug:
           ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon-Dev
 schemes:
-  AgentPluginManager:
+  AgentHarnessManager:
     build:
       targets:
-        AgentPluginManager: all
+        AgentHarnessManager: all
     run:
       config: Debug
     profile:

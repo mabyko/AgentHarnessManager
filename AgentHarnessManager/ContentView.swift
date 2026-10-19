@@ -74,7 +74,7 @@ struct ContentView: View {
                 .background(WorkbenchTheme.raised)
             }
             .background(WorkbenchTheme.surface)
-            .navigationTitle("Agent Plugin Manager")
+            .navigationTitle("Agent Harness Manager")
             .toolbar {
                 ToolbarItem {
                     Button { Task { await store.rescan() } } label: {

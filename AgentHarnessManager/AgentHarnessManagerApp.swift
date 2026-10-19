@@ -1,12 +1,12 @@
 import SwiftUI
 
 @main
-struct AgentPluginManagerApp: App {
+struct AgentHarnessManagerApp: App {
     @State private var store = AppStore()
     @AppStorage("appearance") private var appearance = "system"
 
     var body: some Scene {
-        Window("Agent Plugin Manager", id: "workbench") {
+        Window("Agent Harness Manager", id: "workbench") {
             ContentView()
                 .environment(store)
                 .preferredColorScheme(colorScheme)
