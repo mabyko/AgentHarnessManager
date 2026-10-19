@@ -7,99 +7,111 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		2AB1585479B2410D06BAFB96 /* ProfilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01A5394F1BC62BA8CEF16946 /* ProfilesView.swift */; };
-		3D32FEB9B0807200C096F02B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E1D4B59B25464C4814254D3 /* SettingsView.swift */; };
-		5F4D5D46A4F5E1840EBD87F8 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44176E6A2D5F1095426D0421 /* Theme.swift */; };
-		82F61AB2E78802480B22AD69 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50947EDD53EDB6A74C7C485E /* AppStore.swift */; };
-		857488910316F82A4D87E4D0 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B1CBE0CC988D699D3DC835E /* ContentView.swift */; };
-		AAE3CEF1B99CD6FC7BDC5E9D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E6E0E15DF0CC08520B21C5C5 /* Assets.xcassets */; };
-		DD7147C478728459D6B809DC /* SkillCore in Frameworks */ = {isa = PBXBuildFile; productRef = 6C859545C06B66412E96C1E0 /* SkillCore */; };
-		FC973A6DECD527DD94A7EC70 /* AgentHarnessManagerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411729D44B73A9879EB88D8B /* AgentHarnessManagerApp.swift */; };
+		046617C0EC5F7355D5EE8EB7 /* AgentHarnessManagerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4648E22346D3B60C07F64EC3 /* AgentHarnessManagerApp.swift */; };
+		0D3A214EF647234E69DA8D6D /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1D5E45C77CB6EC8544751B1 /* SettingsView.swift */; };
+		23889C273FA9B998C334772F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA8BD84EF934F28CA5DDC8D5 /* Assets.xcassets */; };
+		80B16C3C1E52DD816BB26758 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EB2B5BADF93056410B09D53 /* ContentView.swift */; };
+		96F26E379EEE5612F292F8BF /* SkillCore in Frameworks */ = {isa = PBXBuildFile; productRef = B3D2D69B148ED192386C912A /* SkillCore */; };
+		A3874B258F4FE2E3CBDF3B86 /* SourceEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54AFE311CF9FC0A9CFEA80B5 /* SourceEditorSheet.swift */; };
+		A4001A28DE8EDDAA2F58E45C /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85D6987CB8D185A48C342191 /* Theme.swift */; };
+		C23F2A1115C31BBDE4659A6C /* GroupEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC0D50375D9F50B321F8DFD /* GroupEditor.swift */; };
+		C6F297AFB8EC851BABFFFC55 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03E13032B28754ABABDA1E18 /* AppStore.swift */; };
+		E846BE31F80AF00C1204611B /* LibrarySidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89FEB34E5FCBAC4B241D1BFD /* LibrarySidebar.swift */; };
+		F4B69888ECB33B2D89C1CCF7 /* LibraryDetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4DBA3B58FF703DDA1DE4A2F /* LibraryDetailViews.swift */; };
+		F945E18ACA2048183A287BC8 /* ProfilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C8B4FEA5790C59DF2741BA2 /* ProfilesView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		01A5394F1BC62BA8CEF16946 /* ProfilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesView.swift; sourceTree = "<group>"; };
-		1D893C0975ADE6112F1D11F3 /* AgentHarnessManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentHarnessManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		411729D44B73A9879EB88D8B /* AgentHarnessManagerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentHarnessManagerApp.swift; sourceTree = "<group>"; };
-		44176E6A2D5F1095426D0421 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
-		50947EDD53EDB6A74C7C485E /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
-		6B1CBE0CC988D699D3DC835E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		793B362747985D0CE9C15BFA /* SkillCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SkillCore; path = Packages/SkillCore; sourceTree = SOURCE_ROOT; };
-		7E1D4B59B25464C4814254D3 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		D295A2531CB078E3D0BB48B4 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
-		E6E0E15DF0CC08520B21C5C5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		03E13032B28754ABABDA1E18 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
+		4648E22346D3B60C07F64EC3 /* AgentHarnessManagerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentHarnessManagerApp.swift; sourceTree = "<group>"; };
+		54AFE311CF9FC0A9CFEA80B5 /* SourceEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceEditorSheet.swift; sourceTree = "<group>"; };
+		6C8B4FEA5790C59DF2741BA2 /* ProfilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesView.swift; sourceTree = "<group>"; };
+		6F1B2205F75CDD9CC95C42D9 /* SkillCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SkillCore; path = Packages/SkillCore; sourceTree = SOURCE_ROOT; };
+		731707B3564DB9FE8C16896E /* AgentHarnessManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentHarnessManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		85D6987CB8D185A48C342191 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		89FEB34E5FCBAC4B241D1BFD /* LibrarySidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySidebar.swift; sourceTree = "<group>"; };
+		9EB2B5BADF93056410B09D53 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		AA8BD84EF934F28CA5DDC8D5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		BBFDA0EF8B1D8E8CEC44F6BF /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		C4DBA3B58FF703DDA1DE4A2F /* LibraryDetailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryDetailViews.swift; sourceTree = "<group>"; };
+		DAC0D50375D9F50B321F8DFD /* GroupEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupEditor.swift; sourceTree = "<group>"; };
+		E1D5E45C77CB6EC8544751B1 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		14178D651D1E118C15A79973 /* Frameworks */ = {
+		687398F5AFDD9F5E998F6543 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				DD7147C478728459D6B809DC /* SkillCore in Frameworks */,
+				96F26E379EEE5612F292F8BF /* SkillCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		0A3CAE3F1A89D8D0788678C1 /* AgentHarnessManager */ = {
+		0E0B85C3FD365BC84B2A3C8B /* AgentHarnessManager */ = {
 			isa = PBXGroup;
 			children = (
-				411729D44B73A9879EB88D8B /* AgentHarnessManagerApp.swift */,
-				50947EDD53EDB6A74C7C485E /* AppStore.swift */,
-				E6E0E15DF0CC08520B21C5C5 /* Assets.xcassets */,
-				6B1CBE0CC988D699D3DC835E /* ContentView.swift */,
-				01A5394F1BC62BA8CEF16946 /* ProfilesView.swift */,
-				7E1D4B59B25464C4814254D3 /* SettingsView.swift */,
-				44176E6A2D5F1095426D0421 /* Theme.swift */,
+				4648E22346D3B60C07F64EC3 /* AgentHarnessManagerApp.swift */,
+				03E13032B28754ABABDA1E18 /* AppStore.swift */,
+				AA8BD84EF934F28CA5DDC8D5 /* Assets.xcassets */,
+				9EB2B5BADF93056410B09D53 /* ContentView.swift */,
+				DAC0D50375D9F50B321F8DFD /* GroupEditor.swift */,
+				C4DBA3B58FF703DDA1DE4A2F /* LibraryDetailViews.swift */,
+				89FEB34E5FCBAC4B241D1BFD /* LibrarySidebar.swift */,
+				6C8B4FEA5790C59DF2741BA2 /* ProfilesView.swift */,
+				E1D5E45C77CB6EC8544751B1 /* SettingsView.swift */,
+				54AFE311CF9FC0A9CFEA80B5 /* SourceEditorSheet.swift */,
+				85D6987CB8D185A48C342191 /* Theme.swift */,
 			);
 			path = AgentHarnessManager;
 			sourceTree = "<group>";
 		};
-		38CB6B928320F6FFA8763D02 /* Config */ = {
+		4E02E43E2E4F2A95D44D6503 /* Packages */ = {
 			isa = PBXGroup;
 			children = (
-				D295A2531CB078E3D0BB48B4 /* Base.xcconfig */,
-			);
-			path = Config;
-			sourceTree = "<group>";
-		};
-		4EB4ECC77574BAC15E8F8636 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				1D893C0975ADE6112F1D11F3 /* AgentHarnessManager.app */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-		664D4FC66271B7F24F9C1E19 /* Packages */ = {
-			isa = PBXGroup;
-			children = (
-				793B362747985D0CE9C15BFA /* SkillCore */,
+				6F1B2205F75CDD9CC95C42D9 /* SkillCore */,
 			);
 			path = Packages;
 			sourceTree = "<group>";
 		};
-		CF319855D2ACA4FD920E2BF4 = {
+		9B9C88DE239186F6E1EE4366 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				0A3CAE3F1A89D8D0788678C1 /* AgentHarnessManager */,
-				38CB6B928320F6FFA8763D02 /* Config */,
-				664D4FC66271B7F24F9C1E19 /* Packages */,
-				4EB4ECC77574BAC15E8F8636 /* Products */,
+				731707B3564DB9FE8C16896E /* AgentHarnessManager.app */,
 			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CACE88D44F6BE7F337F3D14D = {
+			isa = PBXGroup;
+			children = (
+				0E0B85C3FD365BC84B2A3C8B /* AgentHarnessManager */,
+				DBE6D07281DF35DA3202A520 /* Config */,
+				4E02E43E2E4F2A95D44D6503 /* Packages */,
+				9B9C88DE239186F6E1EE4366 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		DBE6D07281DF35DA3202A520 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				BBFDA0EF8B1D8E8CEC44F6BF /* Base.xcconfig */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		01C5775D1CB47C05F0C5B7A6 /* AgentHarnessManager */ = {
+		6464EE95ACDAE45EEAD43DF9 /* AgentHarnessManager */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = ECFA9D1A9D11001FCCE0670D /* Build configuration list for PBXNativeTarget "AgentHarnessManager" */;
+			buildConfigurationList = 745D81AF09A0A0F87FC883B2 /* Build configuration list for PBXNativeTarget "AgentHarnessManager" */;
 			buildPhases = (
-				772E63105F71CA63D97E4ECF /* Sources */,
-				2754D8AD7277C26B2B19D1C1 /* Resources */,
-				14178D651D1E118C15A79973 /* Frameworks */,
+				1069F553767CCF90119DD760 /* Sources */,
+				840FE88341CDD58B082EC98B /* Resources */,
+				687398F5AFDD9F5E998F6543 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -107,79 +119,107 @@
 			);
 			name = AgentHarnessManager;
 			packageProductDependencies = (
-				6C859545C06B66412E96C1E0 /* SkillCore */,
+				B3D2D69B148ED192386C912A /* SkillCore */,
 			);
 			productName = AgentHarnessManager;
-			productReference = 1D893C0975ADE6112F1D11F3 /* AgentHarnessManager.app */;
+			productReference = 731707B3564DB9FE8C16896E /* AgentHarnessManager.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		DF38D7EF27DF12F2CDD6446D /* Project object */ = {
+		C85181A835071F30251ECA68 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
-					01C5775D1CB47C05F0C5B7A6 = {
+					6464EE95ACDAE45EEAD43DF9 = {
 						ProvisioningStyle = Automatic;
 					};
 				};
 			};
-			buildConfigurationList = C937D518E301D958A9A2A200 /* Build configuration list for PBXProject "AgentHarnessManager" */;
+			buildConfigurationList = BB82F809B34476164FCB9136 /* Build configuration list for PBXProject "AgentHarnessManager" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				Base,
 				en,
 			);
-			mainGroup = CF319855D2ACA4FD920E2BF4;
+			mainGroup = CACE88D44F6BE7F337F3D14D;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				5DA09978C4E643B6E7C31637 /* XCLocalSwiftPackageReference "Packages/SkillCore" */,
+				BB987B523AA94A7DA1000E3B /* XCLocalSwiftPackageReference "Packages/SkillCore" */,
 			);
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 4EB4ECC77574BAC15E8F8636 /* Products */;
+			productRefGroup = 9B9C88DE239186F6E1EE4366 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				01C5775D1CB47C05F0C5B7A6 /* AgentHarnessManager */,
+				6464EE95ACDAE45EEAD43DF9 /* AgentHarnessManager */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		2754D8AD7277C26B2B19D1C1 /* Resources */ = {
+		840FE88341CDD58B082EC98B /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AAE3CEF1B99CD6FC7BDC5E9D /* Assets.xcassets in Resources */,
+				23889C273FA9B998C334772F /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		772E63105F71CA63D97E4ECF /* Sources */ = {
+		1069F553767CCF90119DD760 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FC973A6DECD527DD94A7EC70 /* AgentHarnessManagerApp.swift in Sources */,
-				82F61AB2E78802480B22AD69 /* AppStore.swift in Sources */,
-				857488910316F82A4D87E4D0 /* ContentView.swift in Sources */,
-				2AB1585479B2410D06BAFB96 /* ProfilesView.swift in Sources */,
-				3D32FEB9B0807200C096F02B /* SettingsView.swift in Sources */,
-				5F4D5D46A4F5E1840EBD87F8 /* Theme.swift in Sources */,
+				046617C0EC5F7355D5EE8EB7 /* AgentHarnessManagerApp.swift in Sources */,
+				C6F297AFB8EC851BABFFFC55 /* AppStore.swift in Sources */,
+				80B16C3C1E52DD816BB26758 /* ContentView.swift in Sources */,
+				C23F2A1115C31BBDE4659A6C /* GroupEditor.swift in Sources */,
+				F4B69888ECB33B2D89C1CCF7 /* LibraryDetailViews.swift in Sources */,
+				E846BE31F80AF00C1204611B /* LibrarySidebar.swift in Sources */,
+				F945E18ACA2048183A287BC8 /* ProfilesView.swift in Sources */,
+				0D3A214EF647234E69DA8D6D /* SettingsView.swift in Sources */,
+				A3874B258F4FE2E3CBDF3B86 /* SourceEditorSheet.swift in Sources */,
+				A4001A28DE8EDDAA2F58E45C /* Theme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		563C5118BACA5B30D64CDCA1 /* Debug */ = {
+		352DAA24AED8CFA5991C4673 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = D295A2531CB078E3D0BB48B4 /* Base.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 11;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AGENT_SKILL_MANAGER_BUNDLE_ID)";
+				PRODUCT_NAME = "$(APP_PRODUCT_NAME)";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		4525817E03FBEB055B598279 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = BBFDA0EF8B1D8E8CEC44F6BF /* Base.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -242,7 +282,7 @@
 			};
 			name = Debug;
 		};
-		6DDC0E89CA10613D1601915E /* Debug */ = {
+		4B83465C000B863D7680EB3C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon-Dev";
@@ -266,33 +306,9 @@
 			};
 			name = Debug;
 		};
-		728770475DBAF803C64AFD23 /* Release */ = {
+		DB1A45F757ABC545EC367D5F /* Release */ = {
 			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 11;
-				ENABLE_APP_SANDBOX = NO;
-				ENABLE_HARDENED_RUNTIME = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(AGENT_SKILL_MANAGER_BUNDLE_ID)";
-				PRODUCT_NAME = "$(APP_PRODUCT_NAME)";
-				SDKROOT = macosx;
-			};
-			name = Release;
-		};
-		D5F5F310609BBFDB7BEB1862 /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = D295A2531CB078E3D0BB48B4 /* Base.xcconfig */;
+			baseConfigurationReference = BBFDA0EF8B1D8E8CEC44F6BF /* Base.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -351,20 +367,20 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		C937D518E301D958A9A2A200 /* Build configuration list for PBXProject "AgentHarnessManager" */ = {
+		745D81AF09A0A0F87FC883B2 /* Build configuration list for PBXNativeTarget "AgentHarnessManager" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				563C5118BACA5B30D64CDCA1 /* Debug */,
-				D5F5F310609BBFDB7BEB1862 /* Release */,
+				4B83465C000B863D7680EB3C /* Debug */,
+				352DAA24AED8CFA5991C4673 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		ECFA9D1A9D11001FCCE0670D /* Build configuration list for PBXNativeTarget "AgentHarnessManager" */ = {
+		BB82F809B34476164FCB9136 /* Build configuration list for PBXProject "AgentHarnessManager" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				6DDC0E89CA10613D1601915E /* Debug */,
-				728770475DBAF803C64AFD23 /* Release */,
+				4525817E03FBEB055B598279 /* Debug */,
+				DB1A45F757ABC545EC367D5F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
@@ -372,18 +388,18 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		5DA09978C4E643B6E7C31637 /* XCLocalSwiftPackageReference "Packages/SkillCore" */ = {
+		BB987B523AA94A7DA1000E3B /* XCLocalSwiftPackageReference "Packages/SkillCore" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/SkillCore;
 		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		6C859545C06B66412E96C1E0 /* SkillCore */ = {
+		B3D2D69B148ED192386C912A /* SkillCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = SkillCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
-	rootObject = DF38D7EF27DF12F2CDD6446D /* Project object */;
+	rootObject = C85181A835071F30251ECA68 /* Project object */;
 }

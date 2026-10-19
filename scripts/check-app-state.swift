@@ -20,7 +20,7 @@ struct AppStateCheck {
         }
         let store = AppStore(defaults: defaults, home: home)
         await store.rescan()
-        precondition(store.page == .profiles && store.entries.count == 2)
+        precondition(store.page == .library && store.entries.count == 2)
         let profileID = UUID()
         let members = Set(store.entries.map(\.id))
         precondition(store.saveProfile(id: profileID, name: "  Writing  ", note: "Daily work", memberIDs: members))
@@ -42,7 +42,7 @@ struct AppStateCheck {
         precondition(!store.addRoot(url: URL(string: "https://example.com/skills")!, agent: .custom, name: "Remote"))
         let restored = AppStore(defaults: defaults, home: home)
         await restored.rescan()
-        precondition(restored.page == .profiles && restored.selectedProfile?.id == profileID)
+        precondition(restored.page == .library && restored.selectedProfile?.id == profileID)
         precondition(!restored.saveProfile(id: profileID, name: " ", note: "", memberIDs: members))
         precondition(!restored.saveProfile(id: profileID, name: String(repeating: "a", count: 81), note: "", memberIDs: members))
         precondition(!restored.saveProfile(id: UUID(), name: "Forged", note: "", memberIDs: ["unregistered-file"]))
@@ -134,6 +134,7 @@ struct AppStateCheck {
         restored.deleteProfile(targetID)
         precondition(AppStore(defaults: defaults, home: home).profiles.isEmpty)
         try await checkSources()
+        try await checkLibrary()
         print("PASS: profile create/edit/search/reload/delete, missing members preserved, invalid/corrupt state blocked, filters, fixed default paths, additional path edit/delete/reload, import profiles, reject missing members, preserve imported snapshots, no skill file changes")
     }
 
@@ -249,6 +250,100 @@ struct AppStateCheck {
         precondition(restored.rootFilterID == nil && restored.agentFilter == nil && restored.sourceFilterID == repo.id)
         precondition(!restored.availableAgents.contains(.custom), "Removing the last path removes its agent option without losing the source")
         print("PASS: receipt provenance, copies/links, source counts/search, linked agent/location filters, multiple/empty paths, root edit/removal, manual override/unlink/reload, independent profiles, replacement identity, credential rejection, corrupt metadata preserved, no source file changes")
+    }
+
+    @MainActor private static func checkLibrary() async throws {
+        let files = FileManager.default
+        let home = files.temporaryDirectory.appendingPathComponent("LibraryAppCheck-\(UUID().uuidString)")
+        let suite = "LibraryAppCheck.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { try? files.removeItem(at: home); defaults.removePersistentDomain(forName: suite) }
+        let root = DiscoveryRoot(agent: .codex, url: home.appendingPathComponent(".agents/skills"), label: "Codex · 사용자 스킬")
+        for name in ["one", "two", "three"] {
+            let directory = root.url.appendingPathComponent(name)
+            try files.createDirectory(at: directory, withIntermediateDirectories: true)
+            try "---\nname: \(name)\ndescription: A test skill\n---\nBody\n".write(to: directory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        }
+        let entries = SkillCatalog.scan(roots: [root]).entries
+        let legacy = WorkProfile(name: "Legacy", note: "Preserved note", members: [
+            ProfileMember(id: entries[0].id, name: entries[0].name, path: entries[0].url.path, agentName: "Codex"),
+            ProfileMember(id: "missing-id", name: "Missing", path: "/unavailable", agentName: "Codex")
+        ])
+        let originalData = try JSONEncoder().encode([legacy])
+        defaults.set(originalData, forKey: "workProfiles")
+        let store = AppStore(defaults: defaults, home: home)
+        await store.rescan()
+        precondition(store.page == .library && store.skills.count == 3)
+        precondition(store.groups.count == 1 && store.groups[0].id == legacy.id && store.groups[0].skillIDs.count == 2)
+        precondition(store.groups[0].skillIDs.contains("legacy:missing-id"))
+        precondition(store.profiles[0].note == "Preserved note" && defaults.data(forKey: "workProfiles") == originalData)
+        await store.rescan()
+        precondition(store.groups.count == 1, "Migration is idempotent")
+        store.deleteGroup(legacy.id)
+        await store.rescan()
+        precondition(store.groups.isEmpty, "Deleted imported groups do not reappear")
+        let one = store.skills.first { $0.name == "one" }!.id
+        let two = store.skills.first { $0.name == "two" }!.id
+        let three = store.skills.first { $0.name == "three" }!.id
+        let a = SkillGroup(name: "A", skillIDs: [one, two])
+        let b = SkillGroup(name: "B", skillIDs: [two, three])
+        precondition(store.saveGroup(a) && store.saveGroup(b))
+        precondition(!store.saveGroup(SkillGroup(name: "Forged", skillIDs: ["invalid"])))
+        let oneEntry = store.entries.first { $0.name == "one" }!
+        precondition(store.saveSource(for: oneEntry, input: "owner/repo"))
+        store.toggleFavorite(one)
+        store.navigate(.favorites)
+        precondition(store.filteredSkills.map(\.id) == [one])
+        store.navigate()
+        store.setGroupMode(.multiple)
+        precondition(store.preferences.activeGroupIDs.isEmpty, "Creating a group does not activate it")
+        await store.prepareGroupChange(a, enabled: true)
+        precondition(store.mutationPreview == nil && store.preferences.activeGroupIDs == [a.id], "No file changes need no preview")
+        await store.prepareGroupChange(b, enabled: true)
+        precondition(store.preferences.activeGroupIDs == [a.id, b.id])
+        await store.prepareGroupChange(a, enabled: false)
+        precondition(store.mutationPreview?.installations.count == 1, "Overlap remains enabled for B")
+        await store.applyPreview()
+        precondition(store.skills.first { $0.id == one }?.isEnabled == false)
+        precondition(store.skills.first { $0.id == two }?.isEnabled == true)
+        precondition(store.skills.first { $0.id == three }?.isEnabled == true)
+        precondition(store.journal.disabled.count == 1 && store.journal.pending == nil)
+        let storedOne = store.skills.first { $0.id == one }!.installations[0]
+        precondition(store.sourceRepository(for: storedOne) == SourceRepository("owner/repo"))
+        precondition(store.sourceGroups.count == 1 && store.sourceGroups[0].count == 1)
+        store.navigate(.off)
+        precondition(store.filteredSkills.map(\.id) == [one])
+        store.setGroupMode(.single)
+        await store.prepareGroupChange(a, enabled: true)
+        precondition(store.mutationPreview?.installations.count == 2)
+        await store.applyPreview()
+        precondition(store.skills.first { $0.id == one }?.isEnabled == true)
+        precondition(store.skills.first { $0.id == two }?.isEnabled == true)
+        precondition(store.skills.first { $0.id == three }?.isEnabled == false)
+        precondition(Set(store.skills.map(\.id)) == Set([one, two, three]))
+        store.runLocalReview()
+        precondition(store.page == .history && store.reviews.count == 1)
+        let restored = AppStore(defaults: defaults, home: home)
+        await restored.rescan()
+        precondition(restored.preferences.favorites.contains(one) && restored.groups.count == 2 && restored.reviews.count == 1)
+        precondition(restored.reviews[0].snapshotID == restored.localReview.snapshotID)
+        precondition(restored.profiles[0].note == "Preserved note" && defaults.data(forKey: "workProfiles") == originalData)
+        let missingCodex = home.appendingPathComponent("missing-codex")
+        precondition(restored.addRoot(url: missingCodex, agent: .codex, name: "Additional Codex"))
+        await restored.rescan()
+        precondition(restored.currentFindings.contains { $0.path == missingCodex.path }, "Missing additional Codex paths remain findings")
+        await restored.removeRoot(restored.additionalRoots.first { $0.url == missingCodex }!)
+        let invalid = Data("invalid".utf8)
+        defaults.set(invalid, forKey: "libraryPreferences.v1")
+        defaults.set(invalid, forKey: "review-history.v1")
+        let corrupt = AppStore(defaults: defaults, home: home)
+        await corrupt.rescan()
+        precondition(corrupt.preferencesLoadFailed && corrupt.reviewsLoadFailed)
+        precondition(!corrupt.saveGroup(SkillGroup(name: "Do not overwrite")))
+        corrupt.runLocalReview()
+        precondition(defaults.data(forKey: "libraryPreferences.v1") == invalid && defaults.data(forKey: "review-history.v1") == invalid)
+        precondition(defaults.data(forKey: "workProfiles") == originalData)
+        print("PASS: canonical library, idempotent legacy migration and preserved notes/missing references, group CRUD, favorites, overlapping multiple/single activation, disable/restore identity, local review history, corrupt state preserved")
     }
 
 }

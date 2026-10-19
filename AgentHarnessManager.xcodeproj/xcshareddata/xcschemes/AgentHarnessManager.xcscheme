@@ -15,7 +15,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "01C5775D1CB47C05F0C5B7A6"
+               BlueprintIdentifier = "6464EE95ACDAE45EEAD43DF9"
                BuildableName = "AgentHarnessManager.app"
                BlueprintName = "AgentHarnessManager"
                ReferencedContainer = "container:AgentHarnessManager.xcodeproj">
@@ -32,7 +32,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "01C5775D1CB47C05F0C5B7A6"
+            BlueprintIdentifier = "6464EE95ACDAE45EEAD43DF9"
             BuildableName = "AgentHarnessManager.app"
             BlueprintName = "AgentHarnessManager"
             ReferencedContainer = "container:AgentHarnessManager.xcodeproj">
@@ -55,7 +55,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "01C5775D1CB47C05F0C5B7A6"
+            BlueprintIdentifier = "6464EE95ACDAE45EEAD43DF9"
             BuildableName = "AgentHarnessManager.app"
             BlueprintName = "AgentHarnessManager"
             ReferencedContainer = "container:AgentHarnessManager.xcodeproj">
@@ -74,7 +74,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "01C5775D1CB47C05F0C5B7A6"
+            BlueprintIdentifier = "6464EE95ACDAE45EEAD43DF9"
             BuildableName = "AgentHarnessManager.app"
             BlueprintName = "AgentHarnessManager"
             ReferencedContainer = "container:AgentHarnessManager.xcodeproj">

@@ -5,350 +5,243 @@ import SwiftUI
 struct ContentView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.openSettings) private var openSettings
+    @State private var groupEditor: SkillGroup?
 
     var body: some View {
         @Bindable var store = store
         NavigationSplitView {
-            sidebar.navigationSplitViewColumnWidth(min: 210, ideal: 250, max: 320)
-        } detail: {
+            LibrarySidebar { groupEditor = SkillGroup() }
+                .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 300)
+        } content: {
             VStack(spacing: 0) {
-                if store.page == .profiles {
-                    ProfilesView()
-                } else {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(store.page == .library ? store.sourceTitle : store.page.title).font(.title2.weight(.semibold))
-                        Text(scopeTitle).font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text("\(store.filteredEntries.count + (store.page == .findings ? store.filteredProblemRoots.count : 0))개 표시")
-                        if store.page == .library {
-                            Text("출처 전체 \(store.sourceEntryCount)개").font(.caption)
-                        }
-                    }.foregroundStyle(.secondary).monospacedDigit()
-                }
-                .padding(24)
-                filters
-                if let message = store.sourceMessage, store.page == .library {
-                    Label(message, systemImage: "exclamationmark.triangle")
-                        .font(.caption).foregroundStyle(WorkbenchTheme.warning)
-                        .padding(.horizontal, 24).padding(.bottom, 12)
-                }
+                listHeader
                 Divider()
-                if store.filteredEntries.isEmpty && (store.page != .findings || store.filteredProblemRoots.isEmpty) {
-                    emptyState.frame(maxHeight: .infinity)
-                } else {
-                    List {
-                        if store.page == .findings {
-                            ForEach(store.filteredProblemRoots) { observation in
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Label(observation.root.label, systemImage: "exclamationmark.triangle")
-                                        .foregroundStyle(WorkbenchTheme.warning)
-                                    Text(observation.root.url.displayPath).font(.caption).foregroundStyle(.secondary)
-                                    if let message = observation.message { Text(message).font(.caption) }
-                                    Button("설정에서 경로 확인") { openSettings() }
-                                }.padding(.vertical, 8)
-                            }
-                        }
-                        ForEach(store.filteredEntries) { entry in entryRow(entry) }
-                    }
-                    .listStyle(.inset)
-                    .scrollContentBackground(.hidden)
-                }
+                switch store.page {
+                case .library: skillList
+                case .groups: groupList
+                case .findings: findingList
+                case .history: historyList
+                case .profiles:
+                    ContentUnavailableView("이전 작업 구성", systemImage: "archivebox", description: Text("기존 데이터와 메모를 오른쪽에서 확인하세요. 그룹으로 가져온 뒤에도 원본은 보존됩니다."))
                 }
                 Divider()
                 HStack {
-                    Label("스킬 파일 읽기 전용", systemImage: "lock")
+                    if store.isScanning || store.isPreparingChange { ProgressView().controlSize(.mini); Text(store.isPreparingChange ? "변경 계획 확인 중" : "확인 중") }
+                    else { Text("스킬 \(store.skills.count) · 설치 \(store.allInstallations.count)") }
                     Spacer()
-                    if store.isScanning {
-                        ProgressView().controlSize(.mini)
-                        Text("새로고침 중")
-                    } else if let date = store.lastScanned {
-                        Text("마지막 확인")
-                        Text(date, format: .dateTime.hour().minute())
-                    }
-                }
-                .font(.caption).foregroundStyle(.secondary)
-                .padding(.horizontal, 24).padding(.vertical, 12)
-                .background(WorkbenchTheme.raised)
+                    if let date = store.lastScanned { Text(date, format: .dateTime.hour().minute()) }
+                }.font(.caption).foregroundStyle(.secondary).padding(12)
             }
             .background(WorkbenchTheme.surface)
-            .navigationTitle("Agent Harness Manager")
-            .toolbar {
-                ToolbarItem {
-                    Button { Task { await store.rescan() } } label: {
-                        Label("새로고침", systemImage: "arrow.clockwise").labelStyle(.titleAndIcon)
-                    }.disabled(store.isScanning).help("등록한 스킬 폴더를 다시 읽습니다 (⌘R)")
-                }
-                ToolbarItem {
-                    Button { openSettings() } label: {
-                        Label("설정", systemImage: "gearshape").labelStyle(.titleAndIcon)
-                    }.help("에이전트 경로와 화면 모드 관리 (⌘,)")
+            .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 440)
+        } detail: {
+            VStack(spacing: 0) {
+                notices
+                switch store.page {
+                case .library:
+                    if let skill = store.selectedSkill { LibrarySkillDetail(skill: skill).id(skill.id) }
+                    else { selectionPrompt(store.selectedSkillID == nil ? "스킬을 선택하세요" : "선택한 스킬을 찾을 수 없습니다", symbol: "doc.text", description: "설치 위치와 상태, 그룹, SKILL.md 원문을 확인할 수 있습니다.") }
+                case .groups:
+                    if let group = store.selectedGroup { GroupDetail(group: group) { groupEditor = group } }
+                    else { selectionPrompt("그룹을 선택하세요", symbol: "folder", description: "함께 사용할 스킬을 그룹으로 정리하세요.") }
+                case .findings:
+                    if let finding = store.currentFindings.first(where: { $0.id == store.selectedFindingID }) { FindingDetail(finding: finding) }
+                    else { selectionPrompt("검사 결과를 선택하세요", symbol: "checkmark.shield", description: "로컬 검사에서는 문서 읽기와 메타데이터, 등록 경로의 문제를 확인합니다.") }
+                case .history:
+                    if let record = store.selectedReview { ReviewDetail(record: record) }
+                    else { selectionPrompt("검사 이력을 선택하세요", symbol: "clock.arrow.circlepath", description: "저장한 검사 시점의 근거와 현재 상태를 비교할 수 있습니다.") }
+                case .profiles: ProfilesView()
                 }
             }
-            .searchable(text: $store.search, placement: .toolbar, prompt: store.page == .profiles ? "작업 구성 검색" : "이름, 출처 또는 설치 경로")
+            .frame(minWidth: 360)
+            .background(WorkbenchTheme.surface)
         }
+        .navigationSplitViewStyle(.balanced)
+        .navigationTitle("Agent Harness Manager")
         .tint(WorkbenchTheme.accent)
-        .sheet(item: $store.selectedEntry) { entry in
-            SkillDetailSheet(entry: entry, roots: store.registeredRoots, agentName: store.agentName(for: entry))
+        .toolbar {
+            ToolbarItem {
+                Button { Task { await store.rescan() } } label: { Label("새로고침", systemImage: "arrow.clockwise") }
+                    .disabled(store.isScanning || store.isMutating || store.isPreparingChange).help("등록 경로 다시 확인 (⌘R)")
+            }
+            ToolbarItem {
+                Button { store.runLocalReview() } label: { Label("검사", systemImage: "checkmark.shield") }
+                    .disabled(!store.hasScanned || store.isScanning || store.isMutating || store.isPreparingChange || store.reviewsLoadFailed)
+            }
+            ToolbarItem { Button { openSettings() } label: { Label("설정", systemImage: "gearshape") } }
         }
+        .searchable(text: $store.search, placement: .toolbar, prompt: "이름, 설명 또는 경로 검색")
+        .onChange(of: [store.search, store.agentFilter?.rawValue ?? "", store.rootFilterID ?? "", store.sourceFilterID ?? "", String(store.linksOnly)]) { _, _ in
+            if let id = store.selectedSkillID, !store.filteredSkills.contains(where: { $0.id == id }) { store.selectedSkillID = nil }
+        }
+        .sheet(item: $groupEditor) { GroupEditor(group: $0) }
+        .sheet(item: $store.mutationPreview, onDismiss: { store.cancelPreview() }) { MutationPreview(plan: $0) }
         .task { if !store.hasScanned && !store.isScanning { await store.rescan() } }
     }
 
-    private var sidebar: some View {
-        List {
-            Section {
-                navigationRow(.profiles)
-                navigationRow(.library)
-                navigationRow(.findings)
-            } header: { Text("스킬 관리").foregroundStyle(WorkbenchTheme.sidebarText) }
-            Section {
-                sourceRow("모든 출처", id: nil, count: store.entries.count)
-                ForEach(store.sourceGroups) { group in
-                    sourceRow(group.repository.name, id: group.id, count: group.count)
-                }
-                sourceRow("출처 미확인", id: AppStore.unknownSourceID, count: store.unknownSourceCount)
-            } header: { Text("출처").foregroundStyle(WorkbenchTheme.sidebarText) }
-
-        }.listStyle(.sidebar)
-    }
-
-    private func sourceRow(_ title: String, id: String?, count: Int) -> some View {
-        let selected = store.page == .library && store.sourceFilterID == id
-        return Button { store.showLibrary(sourceID: id) } label: {
-            HStack(spacing: 8) {
-                Image(systemName: id == AppStore.unknownSourceID ? "questionmark.folder" : "shippingbox").frame(width: 18)
-                Text(title).foregroundStyle(selected ? WorkbenchTheme.accent : WorkbenchTheme.sidebarText).lineLimit(1).truncationMode(.middle)
-                Spacer(minLength: 2)
-                Text("\(count)").foregroundStyle(selected ? WorkbenchTheme.accent : WorkbenchTheme.sidebarSecondary).font(.caption).monospacedDigit()
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(WorkbenchTheme.raised, in: Capsule())
-                    .fixedSize()
-            }
-            .foregroundStyle(selected ? WorkbenchTheme.accent : WorkbenchTheme.sidebarSecondary)
-            .padding(8)
-            .background(selected ? WorkbenchTheme.selection : .clear, in: RoundedRectangle(cornerRadius: 6))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("\(title) · 설치 항목 \(count)개 (복사본과 링크 포함)")
-        .accessibilityLabel("\(title), 설치 항목 \(count)개")
-        .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-
-    private func navigationRow(_ page: AppPage) -> some View {
-        let selected = store.page == page
-        return Button {
-            if page == .library { store.showLibrary() } else { store.page = page }
-        } label: {
+    private var listHeader: some View {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Image(systemName: page.symbol).frame(width: 18)
-                Text(page.title).foregroundStyle(selected ? WorkbenchTheme.accent : WorkbenchTheme.sidebarText)
+                Text(listTitle).font(.title2.weight(.semibold))
                 Spacer()
-                if page == .findings, store.findingCount > 0 { Text("\(store.findingCount)").font(.caption).foregroundStyle(WorkbenchTheme.sidebarSecondary) }
-            }
-            .foregroundStyle(selected ? WorkbenchTheme.accent : WorkbenchTheme.sidebarSecondary)
-            .padding(8)
-            .background(selected ? WorkbenchTheme.selection : .clear, in: RoundedRectangle(cornerRadius: 6))
-            .contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
-    }
-
-    private var scopeTitle: String {
-        if store.page == .findings { return "읽기 문제와 등록 경로의 오류" }
-        if let root = store.registeredRoots.first(where: { $0.id == store.rootFilterID }) { return root.label }
-        if let agent = store.agentFilter { return "\(agent.displayName) · 모든 설치 위치 · 복사본과 링크를 각각 표시" }
-        return "등록한 모든 설치 위치 · 복사본과 링크를 각각 표시"
-    }
-
-    private var filters: some View {
-        @Bindable var store = store
-        return HStack(spacing: 12) {
-            Picker("에이전트", selection: $store.agentFilter) {
-                Text("모든 에이전트").tag(SkillAgent?.none)
-                ForEach(store.availableAgents, id: \.self) { agent in
-                    Text(agent.displayName).tag(Optional(agent))
+                if store.page == .groups {
+                    Button { groupEditor = SkillGroup() } label: { Label("새 그룹", systemImage: "plus") }.labelStyle(.iconOnly).disabled(!store.metadataIsEditable)
                 }
-            }.labelsHidden().accessibilityLabel("에이전트").frame(maxWidth: 170)
-                .help("선택한 에이전트의 설치 위치만 표시합니다")
+            }
+            if store.page == .library { LibraryFilters() }
+            if store.page == .groups {
+                Picker("그룹 전환", selection: Binding(get: { store.preferences.groupSelectionMode }, set: store.setGroupMode)) {
+                    Text("여러 그룹 함께 켜기").tag(GroupSelectionMode.multiple)
+                    Text("다른 그룹 끄기").tag(GroupSelectionMode.single)
+                }.disabled(!store.metadataIsEditable)
+            }
+            if store.page == .findings { Text("로컬 검사 · \(store.filteredFindings.count)건").font(.caption).foregroundStyle(.secondary) }
+            if store.page == .history { Text("로컬 검사 이력 · 최근 50회 보관").font(.caption).foregroundStyle(.secondary) }
+        }.padding(16)
+    }
+    private var listTitle: String {
+        if store.page != .library { return store.page.title }
+        if let group = store.groups.first(where: { $0.id == store.groupFilterID }) { return group.name }
+        if let agent = store.agentFilter { return agent.displayName }
+        return store.libraryFilter.title
+    }
+    private var skillList: some View {
+        @Bindable var store = store
+        return List(selection: $store.selectedSkillID) {
+            ForEach(store.filteredSkills) { skill in
+                SkillListRow(skill: skill).tag(skill.id)
+                    .listRowBackground(RoundedRectangle(cornerRadius: 8).fill(store.selectedSkillID == skill.id ? WorkbenchTheme.selection : WorkbenchTheme.surface).padding(.vertical, 3))
+            }
+        }
+        .listStyle(.inset).scrollContentBackground(.hidden)
+        .overlay { if store.filteredSkills.isEmpty { emptyList("스킬이 없습니다", description: store.hasFilters || store.libraryFilter != .all ? "검색어나 필터를 바꿔 보세요." : "설정에서 스킬 폴더를 확인하거나 추가하세요.") } }
+    }
+    private var groupList: some View {
+        @Bindable var store = store
+        return List(selection: $store.selectedGroupID) {
+            ForEach(store.filteredGroups) { group in
+                HStack {
+                    Image(systemName: group.symbol).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(group.name).fontWeight(.medium)
+                        Text("스킬 \(group.skillIDs.count)개").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Toggle("\(group.name) 켜기", isOn: Binding(get: { groupIsOn(group) }, set: { enabled in Task { await store.prepareGroupChange(group, enabled: enabled) } }))
+                        .labelsHidden().toggleStyle(.switch).controlSize(.small).disabled(!store.canChangeFiles || !store.metadataIsEditable)
+                }.padding(.vertical, 6).tag(group.id)
+            }
+        }.listStyle(.inset).scrollContentBackground(.hidden)
+            .overlay { if store.filteredGroups.isEmpty { emptyList("그룹이 없습니다", description: "새 그룹을 만들고 함께 사용할 스킬을 선택하세요.") } }
+    }
+    private var findingList: some View {
+        @Bindable var store = store
+        return List(selection: $store.selectedFindingID) {
+            ForEach(store.filteredFindings) { finding in
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(finding.title, systemImage: "exclamationmark.triangle").fontWeight(.medium)
+                    Text(finding.evidence).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                    Text((finding.path as NSString).abbreviatingWithTildeInPath).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                }.padding(.vertical, 6).tag(finding.id)
+            }
+        }.listStyle(.inset).scrollContentBackground(.hidden)
+            .overlay { if store.filteredFindings.isEmpty { emptyList("확인이 필요한 결과가 없습니다", description: "파일 발견은 에이전트의 실제 로딩을 뜻하지 않습니다.") } }
+    }
+    private var historyList: some View {
+        @Bindable var store = store
+        return List(selection: $store.selectedReviewID) {
+            ForEach(store.filteredReviews) { record in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(record.date, format: .dateTime.month().day().hour().minute()).fontWeight(.medium)
+                    Text("\(record.provider) · 스킬 \(record.skillCount)개").font(.caption).foregroundStyle(.secondary)
+                    Text("확인 필요 \(record.findings.count)건").font(.caption).foregroundStyle(.secondary)
+                }.padding(.vertical, 6).tag(record.id)
+            }
+        }.listStyle(.inset).scrollContentBackground(.hidden)
+            .overlay { if store.filteredReviews.isEmpty { emptyList("저장한 검사가 없습니다", description: "도구 막대의 검사를 누르면 현재 결과가 저장됩니다.") } }
+    }
+    private var notices: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let message = store.libraryMessage {
+                HStack(alignment: .top) {
+                    Label(message, systemImage: "info.circle").font(.caption)
+                    Spacer(minLength: 4)
+                    Button { store.libraryMessage = nil } label: { Label("알림 닫기", systemImage: "xmark") }.labelStyle(.iconOnly).buttonStyle(.plain)
+                }.padding(12)
+            }
+            if let message = store.sourceMessage, store.page == .library {
+                Label(message, systemImage: "exclamationmark.triangle").font(.caption).padding(12).foregroundStyle(WorkbenchTheme.warning)
+            }
+            if store.journalLoadFailed {
+                Label("변경 기록을 확인할 수 없어 파일 변경을 잠갔습니다. 기록을 보존한 채 원인을 해결하고 새로고침해 주세요.", systemImage: "lock")
+                    .font(.caption).padding(12).foregroundStyle(WorkbenchTheme.warning)
+            }
+            if store.journal.pending != nil {
+                HStack {
+                    Label("중단된 파일 변경이 있습니다. 기록된 작업을 마쳐야 다른 변경을 할 수 있습니다.", systemImage: "exclamationmark.triangle")
+                    Button("복구 재시도") { Task { await store.recoverChanges() } }.disabled(store.isScanning || store.isMutating || store.isPreparingChange)
+                }.font(.caption).padding(12).background(WorkbenchTheme.warningSurface)
+            }
+            if store.journal.disabled.contains(where: { !$0.matchesCurrentItem }) {
+                Label("보관 항목의 위치나 식별 정보가 바뀌었습니다. 변경 기록을 보존했습니다. 원래 폴더를 확인하세요.", systemImage: "exclamationmark.triangle").font(.caption).padding(12)
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+    private func groupIsOn(_ group: SkillGroup) -> Bool { store.preferences.activeGroupIDs.contains(group.id) }
+    private func emptyList(_ title: String, description: String) -> some View {
+        ContentUnavailableView(title, systemImage: store.isScanning ? "arrow.clockwise" : "magnifyingglass", description: Text(description)).padding(12)
+    }
+    private func selectionPrompt(_ title: String, symbol: String, description: String) -> some View {
+        ContentUnavailableView(title, systemImage: symbol, description: Text(description)).frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct LibraryFilters: View {
+    @Environment(AppStore.self) private var store
+    var body: some View {
+        @Bindable var store = store
+        VStack(spacing: 8) {
             Picker("설치 위치", selection: $store.rootFilterID) {
                 Text("모든 설치 위치").tag(String?.none)
-                ForEach(store.availableRoots) { root in
-                    Text(root.label).tag(Optional(root.id))
-                }
-            }.labelsHidden().accessibilityLabel("설치 위치").frame(maxWidth: 230)
-                .help("특정 위치를 선택하면 해당 에이전트가 함께 선택됩니다. 모든 설치 위치는 현재 에이전트의 모든 경로입니다")
-            Toggle("링크만", isOn: $store.linksOnly).toggleStyle(.checkbox)
-                .help("다른 위치의 원본을 가리키는 심볼릭 링크만 표시합니다")
-            Spacer(minLength: 0)
-            if store.hasFilters { Button("초기화") { store.resetFilters() }.help("현재 출처의 검색과 필터 초기화") }
-        }.padding(.horizontal, 24).padding(.bottom, 16)
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: store.page == .findings ? "checkmark.circle" : "doc.text.magnifyingglass")
-                .font(.system(size: 30)).foregroundStyle(.secondary)
-            Text((!store.hasScanned || store.isScanning) ? "스킬을 확인하고 있습니다" : store.hasFilters ? "조건에 맞는 결과가 없습니다" : store.page == .findings ? "확인이 필요한 문제가 없습니다" : "이 출처나 위치에서 스킬을 찾지 못했습니다")
-                .font(.title3.weight(.semibold))
-            if store.hasFilters { Text("검색어나 필터를 바꾸거나 위의 초기화를 눌러 주세요.").foregroundStyle(.secondary) }
-            else if store.page == .library {
-                Text("설정에서 스킬 폴더의 상태를 확인하거나 경로를 추가하세요.").foregroundStyle(.secondary)
-                Button("설정 열기") { openSettings() }
-            }
-        }.padding(24).frame(maxWidth: .infinity)
-    }
-
-    private func entryRow(_ entry: SkillEntry) -> some View {
-        Button { store.selectedEntry = entry } label: {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: entry.isSymbolicLink ? "link" : "doc.text")
-                    .foregroundStyle(.secondary).frame(width: 24)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(entry.name).font(.callout.weight(.semibold))
-                    HStack(spacing: 6) {
-                        Text(store.sourceRepository(for: entry)?.name ?? "출처 미확인")
-                        if store.sourceRepository(for: entry) != nil {
-                            Text("· " + store.sourceEvidence(for: entry))
-                        }
-                    }.font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    Text(entry.url.displayPath).font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                    if let problem = entry.problem {
-                        Label(problem, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(WorkbenchTheme.warning)
-                    }
-                }.frame(maxWidth: .infinity, alignment: .leading)
-                VStack(alignment: .trailing, spacing: 6) {
-                    Text(store.agentName(for: entry)).font(.caption).foregroundStyle(.secondary)
-                    Image(systemName: "chevron.right").foregroundStyle(.tertiary)
-                }
-            }.padding(.vertical, 9).contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("\(entry.url.path)\n눌러서 SKILL.md 원문 보기")
-        .accessibilityLabel("\(entry.name), \(store.agentName(for: entry)), \(store.sourceRepository(for: entry)?.name ?? "출처 미확인"), \(entry.url.path), \(entry.problem ?? "원문 보기")")
-        .accessibilityIdentifier("entry-\(entry.id)")
-    }
-}
-
-private struct SkillDetailSheet: View {
-    let entry: SkillEntry
-    let roots: [DiscoveryRoot]
-    let agentName: String
-    @Environment(\.dismiss) private var dismiss
-    @Environment(AppStore.self) private var store
-    @State private var editingSource: SkillEntry?
-    @State private var document: String?
-    @State private var errorMessage: String?
-    @State private var copied = false
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text(entry.name).font(.title2.weight(.semibold))
-                    LabeledContent("에이전트", value: agentName)
-                    VStack(alignment: .leading, spacing: 8) {
-                        LabeledContent("출처 저장소", value: store.sourceRepository(for: entry)?.name ?? "출처 미확인")
-                        HStack {
-                            Text(store.sourceEvidence(for: entry)).font(.caption).foregroundStyle(.secondary)
-                            Spacer()
-                            Button(store.sourceRepository(for: entry) == nil ? "출처 연결…" : "출처 수정…") { editingSource = entry }
-                                .disabled(store.isScanning || store.sourcesLoadFailed)
-                        }
-                        Text("설치 기록이나 직접 연결한 주소입니다. 현재 파일과 저장소의 일치 여부는 확인하지 않습니다.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("설치 위치").foregroundStyle(.secondary)
-                        Text(entry.url.path).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
-                        HStack {
-                            Button(copied ? "복사됨" : "경로 복사") {
-                                NSPasteboard.general.clearContents()
-                                copied = NSPasteboard.general.setString(entry.url.path, forType: .string)
-                            }
-                            Button("Finder에서 보기") { NSWorkspace.shared.activateFileViewerSelecting([entry.url]) }
-                        }
-                    }
-                    if entry.isSymbolicLink {
-                        Label("원본을 가리키는 링크", systemImage: "link")
-                        if let target = entry.resolvedURL { Text(target.path).font(.system(.caption, design: .monospaced)).textSelection(.enabled) }
-                    }
-                    if let problem = entry.problem { Label(problem, systemImage: "exclamationmark.triangle").foregroundStyle(WorkbenchTheme.warning) }
-                    Divider()
-                    Text("SKILL.md 원문").font(.headline)
-                    if let document {
-                        Text(document).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading).padding(16)
-                            .background(WorkbenchTheme.raised, in: RoundedRectangle(cornerRadius: 8))
-                    } else if let errorMessage {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle").foregroundStyle(WorkbenchTheme.warning)
-                        Text("설치 위치를 확인한 후 창을 닫고 새로고침해 주세요.").foregroundStyle(.secondary)
-                    } else { ProgressView("문서 읽는 중") }
-                }.padding(28).frame(maxWidth: .infinity, alignment: .leading)
-            }
-            Divider()
+                ForEach(store.availableRoots) { Text($0.label).tag(Optional($0.id)) }
+            }.labelsHidden().accessibilityLabel("설치 위치")
             HStack {
-                Label("읽기 전용 · 문서의 명령을 실행하지 않습니다", systemImage: "lock").font(.caption).foregroundStyle(.secondary)
+                Toggle("링크만", isOn: $store.linksOnly).toggleStyle(.checkbox)
                 Spacer()
-                Button("닫기") { dismiss() }.keyboardShortcut(.cancelAction)
-            }.padding(18).background(WorkbenchTheme.raised)
-        }.frame(width: 700, height: 600).background(WorkbenchTheme.surface)
-        .sheet(item: $editingSource) { SourceEditorSheet(entry: $0) }
-        .task(id: entry.id) {
-            document = nil; errorMessage = nil
-            do {
-                let content = try await Task.detached(priority: .userInitiated) {
-                    try SkillCatalog.readDocument(entry: entry, approvedRoots: roots)
-                }.value
-                if !Task.isCancelled { document = content }
-            } catch {
-                if !Task.isCancelled { errorMessage = error.localizedDescription }
-            }
+                Menu {
+                    Button("모든 출처") { store.sourceFilterID = nil }
+                    ForEach(store.sourceGroups) { group in Button(group.repository.name) { store.sourceFilterID = group.id } }
+                    Button("출처 미확인") { store.sourceFilterID = AppStore.unknownSourceID }
+                } label: { Label(store.sourceTitle, systemImage: "shippingbox") }.lineLimit(1)
+            }.font(.caption)
         }
     }
 }
 
-private struct SourceEditorSheet: View {
-    let entry: SkillEntry
+private struct SkillListRow: View {
+    let skill: CanonicalSkill
     @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
-    @State private var input = ""
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("출처 연결").font(.title2.weight(.semibold))
-            Text(entry.name).foregroundStyle(.secondary)
-            TextField("저장소 주소", text: $input, prompt: Text("owner/repo 또는 https://github.com/owner/repo"))
-                .textFieldStyle(.roundedBorder)
-            if !store.sourceGroups.isEmpty {
-                Menu("등록된 출처에서 선택") {
-                    ForEach(store.sourceGroups) { group in
-                        Button(group.repository.name) { input = group.repository.id }
-                    }
-                }.fixedSize()
-            }
-            Text("이 설치 항목의 출처만 앱에 저장합니다. 다른 복사본이나 원본 파일에는 적용하지 않습니다.")
-                .font(.caption).foregroundStyle(.secondary)
-            if let message = store.sourceMessage {
-                Text(message).font(.caption).foregroundStyle(WorkbenchTheme.warning)
-            }
-            HStack {
-                if store.manualSources[entry.id] != nil {
-                    Button("수동 연결 해제") {
-                        if store.saveSource(for: entry, input: nil) { dismiss() }
-                    }.disabled(store.isScanning || store.sourcesLoadFailed)
-                        .help("설치 기록이 있으면 해당 출처로 돌아갑니다")
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: skill.installations.allSatisfy(\.isSymbolicLink) ? "link" : "doc.text").foregroundStyle(WorkbenchTheme.sidebarSecondary).padding(.top, 2)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(skill.name).font(.callout.weight(.semibold)).foregroundStyle(WorkbenchTheme.sidebarText).lineLimit(2)
+                    if store.preferences.favorites.contains(skill.id) { Image(systemName: "star.fill").font(.caption).accessibilityLabel("즐겨찾기") }
                 }
-                Spacer()
-                Button("취소") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("저장") {
-                    if store.saveSource(for: entry, input: input) { dismiss() }
-                }.keyboardShortcut(.defaultAction).disabled(store.isScanning || store.sourcesLoadFailed)
+                Text(skill.summary).font(.caption).foregroundStyle(WorkbenchTheme.sidebarSecondary).lineLimit(2)
+                Text(skill.installations.map { $0.location.label }.joined(separator: " · ")).font(.caption2).foregroundStyle(WorkbenchTheme.sidebarSecondary).lineLimit(1)
+                HStack(spacing: 6) {
+                    Text("설치 \(skill.installations.count)")
+                    Text(stateTitle)
+                    if skill.hasProblems { Label("확인 필요", systemImage: "exclamationmark.triangle") }
+                }.font(.caption2).foregroundStyle(WorkbenchTheme.sidebarSecondary)
             }
-        }
-        .padding(24).frame(width: 560)
-        .task { input = store.sourceRepository(for: entry)?.id ?? "" }
+        }.padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
+    }
+    private var stateTitle: String {
+        let enabled = skill.installations.filter(\.isEnabled).count
+        return enabled == 0 ? "꺼짐" : enabled == skill.installations.count ? "켜짐" : "일부 켜짐"
     }
 }

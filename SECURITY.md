@@ -10,11 +10,13 @@ Include the affected commit or version, macOS version, a minimal reproduction us
 
 ## Current security boundaries
 
-- Skill discovery and document reading are confined to registered roots. External link targets require registration before their content can be read.
+- Skill discovery and document reading are confined to registered roots and verified journal storage entries. External link targets require registration before their content can be read.
 - The reader accepts regular UTF-8 files up to 2 MiB. It does not read devices, sockets, or FIFOs as skill documents.
 - The app does not execute skill scripts, install plugins, or make network requests.
 - The optional version-3 global installer receipt at `~/.agents/.skill-lock.json` is read separately for source classification. The metadata reader uses anchored, no-follow directory/file opens and rejects symlinks, special files, invalid UTF-8, and files over 2 MiB. Receipt and manual repository URLs reject embedded credentials. Source associations are not content verification or file-access authorization.
-- Work configurations, source associations, and settings are local metadata. Saving or removing them does not change skill files.
+- Groups, favorites, review history, legacy work configurations, source associations, and settings are local metadata. Editing or removing them does not change skill files.
+- File changes require a preview and apply action, and are limited to independent direct child directories of the two default roots. Shared readers, links, nested/custom roots, and provider caches stay read-only. Device/inode, parent, content, and destination checks run again before moving; no destination is overwritten.
+- A locked, atomic, synced journal records pending changes before moves. Interrupted plans resume only after revalidation. Conflicts and changed files preserve the journal and block other writes. Storage folders and the journal must be kept while skills are disabled. Force recovery and completed-operation undo are not implemented.
 - The app is not sandboxed; registered-root checks are application-level protections. Local ad-hoc builds are not notarized distribution builds.
 
 Changes that could bypass root restrictions, read unintended files, corrupt saved metadata, or introduce unreviewed file writes are relevant security reports.

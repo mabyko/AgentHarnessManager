@@ -1,4 +1,5 @@
 // Preserve the legacy bundle ID so existing settings and work profiles remain available.
+// Keep AGENT_SKILL_MANAGER_BUNDLE_ID compatible with existing Local.xcconfig overrides.
 // Fresh checkouts use a local development identity, with no Apple team selected.
 AGENT_SKILL_MANAGER_BUNDLE_ID = forked.agentskillmanager.local
 AGENT_SKILL_MANAGER_BUNDLE_ID[config=Debug] = forked.agentskillmanager.local.dev

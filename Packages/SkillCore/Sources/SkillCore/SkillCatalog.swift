@@ -14,8 +14,8 @@ public enum SkillCatalog {
     private static let candidateLimit = 10_000
     private static let depthLimit = 8
 
-    public static func scan(roots: [DiscoveryRoot]) -> CatalogSnapshot {
-        let approved = roots.compactMap { try? OpenRoot($0) }
+    public static func scan(roots: [DiscoveryRoot], additionalApprovedRoots: [DiscoveryRoot] = []) -> CatalogSnapshot {
+        let approved = (roots + additionalApprovedRoots).compactMap { try? OpenRoot($0) }
         defer { approved.forEach { close($0.fd) } }
         var entries: [SkillEntry] = []
         var observations: [RootObservation] = []
@@ -92,6 +92,7 @@ public enum SkillCatalog {
                 }
                 if errno != 0 { issues.append("폴더 목록을 모두 읽지 못했습니다.") }
                 for name in names.sorted() {
+                    if name.hasPrefix(".ahm-disabled-"), UUID(uuidString: String(name.dropFirst(".ahm-disabled-".count))) != nil { continue }
                     guard count < candidateLimit else { issues.append("후보 10,000개 탐색 한도에 도달했습니다."); break }
                     count += 1
                     var childInfo = stat()

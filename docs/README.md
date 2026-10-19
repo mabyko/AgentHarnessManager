@@ -4,11 +4,11 @@ Start with the [English README](../README.md) or [한국어 README](../README.ko
 
 ## Implementation and design
 
-Most detailed notes are currently in Korean. They include proposed behavior beyond the running app: file changes, recovery, extended source classification, plugin management, and other planned features. Treat the READMEs and source code as the description of current support, and check each document's implementation-status notes before relying on a design contract.
+Most detailed notes are currently in Korean. They include proposed behavior beyond the running app: broader file changes/recovery, extended source classification, AI review, plugin management, and other planned features. Treat the READMEs and source code as the description of current support, and check each document's implementation-status notes before relying on a design contract.
 
 | Document | Purpose |
 | --- | --- |
-| [Architecture](architecture.md) | Current read-only implementation and proposed discovery, file-change, persistence, and recovery contracts |
+| [Architecture](architecture.md) | Current library, group, local review, limited file-change/recovery support, and broader proposed contracts |
 | [Product scenarios](product-scenarios.md) | User flows, scope, failure handling, and acceptance criteria |
 | [Glossary](../GLOSSARY.md) | Plugins, skills, sources, work configurations, and planned file states |
 | [Design system](design-system.md) | Native UI principles, tokens, component states, and accessibility |
@@ -18,10 +18,11 @@ Most detailed notes are currently in Korean. They include proposed behavior beyo
 
 ## Prototypes
 
+[Selected prototype](design/final-preview.html) and [initial prototype](design/preview.html) are review materials. Open the HTML files locally. They use example data and may simulate features that are not implemented in the native app. The prototype checks run with `node scripts/check-design.mjs`.
 
 The source-navigation A/B/C comparison was archived on branch `docs/source-navigation-prototype` at commit `c1e5f4e`; A was selected and implemented in the native app. The archive uses synthetic examples and is separate from production changes.
 
-Older screenshots are historical records, not current product screenshots. The reference board links to third-party images at their original sources; it does not include copied images. See [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+Older screenshots are historical records, not current product screenshots. See [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 
 ## Before publishing
 

@@ -4,13 +4,15 @@ import Foundation
 import SkillCore
 
 enum AppPage: String, CaseIterable, Identifiable {
-    case library, findings, profiles
+    case library, findings, groups, history, profiles
     var id: String { rawValue }
     var title: String {
         switch self {
         case .library: "스킬 목록"
         case .findings: "확인 필요"
-        case .profiles: "작업 구성"
+        case .profiles: "이전 작업 구성"
+        case .groups: "그룹"
+        case .history: "검사 이력"
         }
     }
     var symbol: String {
@@ -18,6 +20,8 @@ enum AppPage: String, CaseIterable, Identifiable {
         case .library: "square.stack.3d.up"
         case .findings: "exclamationmark.triangle"
         case .profiles: "slider.horizontal.3"
+        case .groups: "folder"
+        case .history: "clock.arrow.circlepath"
         }
     }
 }
@@ -44,11 +48,33 @@ struct SourceGroup: Identifiable {
 
 @MainActor @Observable
 final class AppStore {
-    var page: AppPage = .profiles {
+    var page: AppPage = .library {
         didSet {
-            if page != oldValue { sourceFilterID = nil; rootFilterID = nil; resetFilters(); selectedEntry = nil }
+            if page != oldValue { sourceFilterID = nil; rootFilterID = nil; resetFilters(); selectedEntry = nil; selectedSkillID = nil; selectedFindingID = nil }
         }
     }
+    var libraryFilter: LibraryFilter = .all
+    var groupFilterID: UUID?
+    var selectedSkillID: String?
+    var selectedGroupID: UUID?
+    var selectedFindingID: String?
+    var selectedReviewID: UUID?
+    var mutationPreview: MutationPlan?
+    private var pendingActiveGroupIDs: Set<UUID>?
+    var libraryMessage: String?
+    private(set) var preferences = AppPreferences()
+    private(set) var preferencesLoadFailed = false
+    private(set) var reviewsLoadFailed = false
+    private(set) var reviews: [ReviewRecord] = []
+    private(set) var skills: [CanonicalSkill] = []
+    private(set) var currentReview = ReviewRecord(skills: [], roots: [])
+    private(set) var journal = LibraryJournal()
+    private(set) var journalLoadFailed = false
+    private(set) var isMutating = false
+    private(set) var isPreparingChange = false
+    @ObservationIgnored private let libraryService: LibraryService
+    private static let preferencesKey = "libraryPreferences.v1"
+    private static let reviewsKey = "review-history.v1"
     var search = ""
     var agentFilter: SkillAgent? {
         didSet {
@@ -97,11 +123,29 @@ final class AppStore {
     init(defaults: UserDefaults = .standard, home: URL = FileManager.default.homeDirectoryForCurrentUser) {
         self.defaults = defaults
         self.home = home
+        libraryService = LibraryService(stateDirectory: home.resolvingSymlinksInPath()
+            .appendingPathComponent("Library/Application Support/" + (Bundle.main.bundleIdentifier ?? "AgentHarnessManager") + "/Library"))
         automaticRoots = [
             DiscoveryRoot(agent: .codex, url: home.appendingPathComponent(".agents/skills"), label: "Codex · 사용자 스킬"),
             DiscoveryRoot(agent: .claudeCode, url: home.appendingPathComponent(".claude/skills"), label: "Claude Code · 사용자 스킬")
         ]
         registeredRoots = automaticRoots
+        if let data = defaults.data(forKey: Self.preferencesKey) {
+            do {
+                let loaded = try JSONDecoder().decode(AppPreferences.self, from: data)
+                guard loaded.version == 1, Set(loaded.groups.map(\.id)).count == loaded.groups.count,
+                      loaded.groups.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
+                      loaded.activeGroupIDs.isSubset(of: Set(loaded.groups.map(\.id))) else { throw CocoaError(.coderReadCorrupt) }
+                preferences = loaded
+            } catch { preferencesLoadFailed = true; libraryMessage = "그룹·즐겨찾기 설정이 손상되었습니다. 기존 데이터를 보존하고 저장을 잠갔습니다." }
+        }
+        if let data = defaults.data(forKey: Self.reviewsKey) {
+            do {
+                let loaded = try JSONDecoder().decode([ReviewRecord].self, from: data)
+                guard Set(loaded.map(\.id)).count == loaded.count else { throw CocoaError(.coderReadCorrupt) }
+                reviews = loaded
+            } catch { reviewsLoadFailed = true; libraryMessage = "검사 이력을 읽을 수 없습니다. 기존 데이터를 보존하고 이력 저장을 잠갔습니다." }
+        }
         if let saved = defaults.data(forKey: Self.rootsKey) {
             do {
                 let additional = try JSONDecoder().decode([DiscoveryRoot].self, from: saved)
@@ -137,17 +181,17 @@ final class AppStore {
     var roots: [RootObservation] { snapshot.roots }
     var additionalRoots: [DiscoveryRoot] { registeredRoots.filter { !automaticRoots.contains($0) } }
     var sourceGroups: [SourceGroup] {
-        Dictionary(grouping: entries.compactMap { sourceRepository(for: $0) }, by: \.id)
+        Dictionary(grouping: allInstallations.compactMap { sourceRepository(for: $0) }, by: \.id)
             .values.map { SourceGroup(repository: $0[0], count: $0.count) }
             .sorted { $0.count == $1.count ? $0.repository.name.localizedStandardCompare($1.repository.name) == .orderedAscending : $0.count > $1.count }
     }
-    var unknownSourceCount: Int { entries.filter { sourceRepository(for: $0) == nil }.count }
+    var unknownSourceCount: Int { allInstallations.filter { sourceRepository(for: $0) == nil }.count }
     var sourceTitle: String {
         if sourceFilterID == Self.unknownSourceID { return "출처 미확인" }
         return sourceFilterID.flatMap { SourceRepository($0)?.name } ?? "모든 출처"
     }
     var sourceEntryCount: Int {
-        entries.filter { sourceFilterID == nil || (sourceRepository(for: $0)?.id ?? Self.unknownSourceID) == sourceFilterID }.count
+        allInstallations.filter { sourceFilterID == nil || (sourceRepository(for: $0)?.id ?? Self.unknownSourceID) == sourceFilterID }.count
     }
     var scopeEntries: [SkillEntry] {
         entries.filter {
@@ -219,7 +263,7 @@ final class AppStore {
 
     var filteredProfiles: [WorkProfile] { profiles.filter { matchesSearch("\($0.name) \($0.note)") } }
     var selectedProfile: WorkProfile? { filteredProfiles.first { $0.id == selectedProfileID } }
-    var profilesAreEditable: Bool { hasScanned && !isScanning && !profilesLoadFailed }
+    var profilesAreEditable: Bool { hasScanned && !isScanning && !isMutating && !isPreparingChange && !profilesLoadFailed }
 
     @discardableResult
     func saveProfile(id: UUID, name: String, note: String, memberIDs: Set<String>) -> Bool {
@@ -282,6 +326,8 @@ final class AppStore {
 
     func showLibrary(rootID: String? = nil, sourceID: String? = nil) {
         page = .library
+        libraryFilter = .all; groupFilterID = nil
+        selectedSkillID = nil
         resetFilters()
         rootFilterID = rootID
         sourceFilterID = sourceID
@@ -289,20 +335,30 @@ final class AppStore {
     }
 
     func resetFilters() { search = ""; agentFilter = nil; linksOnly = false; rootFilterID = nil }
-    private func matchesSearch(_ text: String) -> Bool { search.isEmpty || text.localizedCaseInsensitiveContains(search) }
+    func matchesSearch(_ text: String) -> Bool { search.isEmpty || text.localizedCaseInsensitiveContains(search) }
 
     func rescan() async {
         scanGeneration += 1
         let generation = scanGeneration
         let inputs = registeredRoots
+        guard !isMutating, !isPreparingChange else { return }
         isScanning = true
         let home = home
-        let (result, sources) = await Task.detached(priority: .userInitiated) {
+        let managed = automaticRoots
+        let saved: LibraryJournal
+        do { saved = try await libraryService.load(roots: managed); journalLoadFailed = false }
+        catch { saved = journal; journalLoadFailed = true; libraryMessage = error.localizedDescription }
+        let (result, sources, library) = await Task.detached(priority: .userInitiated) {
             let catalog = SkillCatalog.scan(roots: inputs)
-            return (catalog, SkillCatalog.installerSources(entries: catalog.entries, home: home))
+            return (catalog, SkillCatalog.installerSources(entries: catalog.entries, home: home),
+                    LibraryCatalog.build(snapshot: catalog, roots: inputs, disabled: saved.disabled))
         }.value
         guard generation == scanGeneration else { return }
         snapshot = result
+        skills = library
+        journal = saved
+        currentReview = ReviewRecord(skills: library, roots: problemRoots)
+        migrateProfiles()
         installerSources = sources.repositories
         if !sourcesLoadFailed { sourceMessage = sources.message }
         if let agentFilter, !availableAgents.contains(agentFilter) { self.agentFilter = nil }
@@ -312,7 +368,7 @@ final class AppStore {
     }
 
     func chooseSkillFolder(agent: SkillAgent, name: String, replacing existing: DiscoveryRoot? = nil) async {
-        guard !isScanning else { return }
+        guard !isScanning, !isMutating, !isPreparingChange else { return }
         let panel = NSOpenPanel()
         panel.title = existing == nil ? "스킬 폴더 추가" : "스킬 경로 수정"
         panel.message = "SKILL.md를 포함한 스킬들이 있는 폴더를 선택하세요. 선택한 폴더만 읽으며 파일을 변경하지 않습니다."
@@ -326,7 +382,7 @@ final class AppStore {
 
     @discardableResult
     func addRoot(url: URL, agent: SkillAgent, name: String, replacing existing: DiscoveryRoot? = nil) -> Bool {
-        guard !isScanning else { return false }
+        guard !isScanning, !isMutating, !isPreparingChange else { return false }
         if let existing {
             guard additionalRoots.contains(where: { $0.id == existing.id }), existing.agent == agent else {
                 settingsMessage = "추가로 등록한 경로만 수정할 수 있습니다."
@@ -353,7 +409,10 @@ final class AppStore {
     }
 
     func removeRoot(_ root: DiscoveryRoot) async {
-        guard !isScanning, additionalRoots.contains(where: { $0.id == root.id }) else { return }
+        guard !isScanning, !isMutating, !isPreparingChange, additionalRoots.contains(where: { $0.id == root.id }) else { return }
+        guard !journal.disabled.contains(where: { $0.location.id == root.id }), journal.pending == nil else {
+            settingsMessage = "보관 중인 설치 항목을 복원하고 중단된 변경을 해결한 뒤 경로를 해제해 주세요."; return
+        }
         guard saveRoots(additionalRoots.filter { $0.id != root.id }) else { return }
         registeredRoots.removeAll { $0.id == root.id }
         if rootFilterID == root.id { rootFilterID = nil }
@@ -368,5 +427,227 @@ final class AppStore {
             defaults.set(try JSONEncoder().encode(roots), forKey: Self.rootsKey)
             return true
         } catch { settingsMessage = "경로 설정을 저장할 수 없습니다. 다시 시도해 주세요."; return false }
+    }
+}
+
+enum LibraryFilter: String, CaseIterable, Identifiable {
+    case all, findings, on, off, favorites, variants
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .all: "전체"
+        case .findings: "검사 결과"
+        case .on: "켜짐"
+        case .off: "꺼짐"
+        case .favorites: "즐겨찾기"
+        case .variants: "다른 버전"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .all: "square.stack.3d.up"
+        case .findings: "exclamationmark.triangle"
+        case .on: "checkmark.circle"
+        case .off: "minus.circle"
+        case .favorites: "star"
+        case .variants: "square.on.square"
+        }
+    }
+}
+
+extension AppStore {
+    var allInstallations: [SkillInstallation] { skills.flatMap(\.installations) }
+    var selectedSkill: CanonicalSkill? { skills.first { $0.id == selectedSkillID } }
+    var groups: [SkillGroup] { preferences.groups }
+    var filteredGroups: [SkillGroup] { groups.filter { matchesSearch($0.name) } }
+    var selectedGroup: SkillGroup? { groups.first { $0.id == selectedGroupID } }
+    var localReview: ReviewRecord { currentReview }
+    var currentFindings: [ReviewFinding] { localReview.findings }
+    var filteredFindings: [ReviewFinding] { currentFindings.filter { matchesSearch("\($0.title) \($0.evidence) \($0.path)") } }
+    var filteredReviews: [ReviewRecord] { reviews.filter { matchesSearch("\($0.provider) \($0.date.formatted())") } }
+    var selectedReview: ReviewRecord? { reviews.first { $0.id == selectedReviewID } }
+    var metadataIsEditable: Bool { hasScanned && !isScanning && !isMutating && !isPreparingChange && !preferencesLoadFailed }
+    var canChangeFiles: Bool { hasScanned && !isScanning && !isMutating && !isPreparingChange && !journalLoadFailed && journal.pending == nil }
+    var hasVariantNames: Set<String> {
+        Set(Dictionary(grouping: skills, by: \.name).filter { Set($0.value.flatMap(\.installations).compactMap(\.contentHash)).count > 1 }.keys)
+    }
+    var filteredSkills: [CanonicalSkill] {
+        skills.filter { skill in
+            matchesFilter(skill, libraryFilter)
+            && (groupFilterID == nil || groups.first(where: { $0.id == groupFilterID })?.skillIDs.contains(skill.id) == true)
+            && skill.installations.contains { item in
+                (agentFilter == nil || item.location.agent == agentFilter)
+                && (rootFilterID == nil || item.location.id == rootFilterID)
+                && (!linksOnly || item.isSymbolicLink)
+                && (sourceFilterID == nil || (sourceRepository(for: item)?.id ?? Self.unknownSourceID) == sourceFilterID)
+                && matchesSearch("\(skill.name) \(item.summary) \(item.originalPath) \(item.location.label) \(sourceRepository(for: item)?.name ?? "출처 미확인")")
+            }
+        }
+    }
+    func sourceRepository(for installation: SkillInstallation) -> SourceRepository? {
+        if let current = sourceRepository(for: installation.entry) { return current }
+        return manualSources.first { LibraryCatalog.digest($0.key) == installation.id }.flatMap { SourceRepository($0.value) }
+    }
+    func matchesFilter(_ skill: CanonicalSkill, _ filter: LibraryFilter) -> Bool {
+        switch filter {
+        case .all: true
+        case .findings: skill.hasProblems
+        case .on: skill.isEnabled
+        case .off: skill.installations.contains { !$0.isEnabled }
+        case .favorites: preferences.favorites.contains(skill.id)
+        case .variants: skill.hasVariants || hasVariantNames.contains(skill.name)
+        }
+    }
+    func count(_ filter: LibraryFilter) -> Int {
+        filter == .findings ? currentFindings.count : skills.filter { matchesFilter($0, filter) }.count
+    }
+    func navigate(_ filter: LibraryFilter = .all, agent: SkillAgent? = nil, group: UUID? = nil) {
+        page = filter == .findings ? .findings : .library
+        resetFilters(); sourceFilterID = nil
+        libraryFilter = filter; agentFilter = agent; groupFilterID = group
+        selectedSkillID = nil; selectedFindingID = nil
+    }
+    func toggleFavorite(_ id: String) {
+        guard metadataIsEditable, skills.contains(where: { $0.id == id }) else { return }
+        var updated = preferences
+        if !updated.favorites.insert(id).inserted { updated.favorites.remove(id) }
+        _ = savePreferences(updated)
+    }
+    @discardableResult
+    func saveGroup(_ group: SkillGroup) -> Bool {
+        guard metadataIsEditable else { return false }
+        var group = group
+        group.name = group.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previous = groups.first { $0.id == group.id }
+        let allowed = Set(skills.map(\.id)).union(previous?.skillIDs ?? [])
+        guard !group.name.isEmpty, group.name.count <= 80, group.skillIDs.isSubset(of: allowed) else {
+            libraryMessage = "그룹 이름은 1~80자여야 하며 현재 목록 또는 기존 그룹의 스킬만 선택할 수 있습니다."; return false
+        }
+        var updated = preferences
+        if let index = updated.groups.firstIndex(where: { $0.id == group.id }) { updated.groups[index] = group }
+        else { updated.groups.append(group) }
+        guard savePreferences(updated) else { return false }
+        selectedGroupID = group.id; libraryMessage = nil
+        return true
+    }
+    func deleteGroup(_ id: UUID) {
+        guard metadataIsEditable else { return }
+        var updated = preferences
+        updated.groups.removeAll { $0.id == id }; updated.activeGroupIDs.remove(id)
+        if savePreferences(updated), selectedGroupID == id { selectedGroupID = nil }
+    }
+    func setGroupMode(_ mode: GroupSelectionMode) {
+        guard metadataIsEditable else { return }
+        var updated = preferences; updated.groupSelectionMode = mode
+        _ = savePreferences(updated)
+    }
+    private func savePreferences(_ updated: AppPreferences) -> Bool {
+        guard !preferencesLoadFailed else { return false }
+        do {
+            defaults.set(try JSONEncoder().encode(updated), forKey: Self.preferencesKey)
+            preferences = updated; return true
+        } catch { libraryMessage = "그룹·즐겨찾기를 저장할 수 없습니다."; return false }
+    }
+    private func migrateProfiles() {
+        guard !preferencesLoadFailed, !profilesLoadFailed else { return }
+        let map = Dictionary(allInstallations.map { ($0.entry.id, "skill:" + $0.id) }, uniquingKeysWith: { first, _ in first })
+        let canonicalIDs = Dictionary(skills.flatMap { skill in skill.installations.map { ($0.entry.id, skill.id) } }, uniquingKeysWith: { first, _ in first })
+        var updated = preferences
+        for profile in profiles where !updated.importedProfileIDs.contains(profile.id) {
+            let ids = Set(profile.members.map { canonicalIDs[$0.id] ?? map[$0.id] ?? "legacy:" + $0.id })
+            if !updated.groups.contains(where: { $0.id == profile.id }) {
+                updated.groups.append(SkillGroup(id: profile.id, name: profile.name.isEmpty ? "이전 작업 구성" : profile.name, skillIDs: ids))
+            }
+            updated.importedProfileIDs.insert(profile.id)
+        }
+        for index in updated.groups.indices {
+            updated.groups[index].skillIDs = Set(updated.groups[index].skillIDs.map { id in
+                id.hasPrefix("legacy:") ? canonicalIDs[String(id.dropFirst("legacy:".count))] ?? id : id
+            })
+        }
+        // Original profiles (including notes and unavailable references) remain untouched.
+        if updated.groups != preferences.groups || updated.importedProfileIDs != preferences.importedProfileIDs { _ = savePreferences(updated) }
+    }
+    func runLocalReview() {
+        guard hasScanned, !isScanning, !isMutating, !reviewsLoadFailed else { return }
+        let record = localReview
+        do {
+            let updated = Array(([record] + reviews).prefix(50))
+            let data = try JSONEncoder().encode(updated)
+            guard data.count <= 2 * 1_024 * 1_024 else { libraryMessage = "검사 이력이 2 MiB 한도를 넘습니다. 기존 이력은 보존했습니다."; return }
+            defaults.set(data, forKey: Self.reviewsKey); reviews = updated
+            page = .history; selectedReviewID = record.id
+        } catch { libraryMessage = "검사 이력을 저장할 수 없습니다." }
+    }
+    func prepareChange(title: String, installations: [SkillInstallation], enabled: Bool) async {
+        guard canChangeFiles else { libraryMessage = "검사 또는 복구를 마친 뒤 변경할 수 있습니다."; return }
+        pendingActiveGroupIDs = nil
+        isPreparingChange = true
+        defer { isPreparingChange = false }
+        let all = allInstallations, managed = automaticRoots, protected = registeredRoots
+        do {
+            let plan = try await Task.detached(priority: .userInitiated) {
+                try LibraryService.plan(title: title, installations: installations, enabled: enabled,
+                    allInstallations: all, managedRoots: managed, protectedRoots: protected)
+            }.value
+            if plan.installations.isEmpty { libraryMessage = "이미 요청한 상태입니다." }
+            else { mutationPreview = plan; libraryMessage = nil }
+        } catch { libraryMessage = error.localizedDescription }
+    }
+    func prepareGroupChange(_ group: SkillGroup, enabled: Bool) async {
+        guard metadataIsEditable, groups.contains(group), group.skillIDs.isSubset(of: Set(skills.map(\.id))), !group.skillIDs.isEmpty else {
+            libraryMessage = "그룹이 비어 있거나 현재 목록에 없는 스킬이 있습니다. 그룹을 편집해 확인해 주세요."; return
+        }
+        let activation = GroupActivationPlan(groups: groups, currentActiveGroupIDs: preferences.activeGroupIDs,
+            mode: preferences.groupSelectionMode, groupID: group.id, enabled: enabled)
+        let targetIDs = activation.activeGroupIDs
+        let keepOn = activation.enabling
+        let turnOff = activation.disabling
+        guard keepOn.union(turnOff).isSubset(of: Set(skills.map(\.id))) else {
+            libraryMessage = "전환할 그룹에 현재 목록에 없는 스킬이 있습니다. 그룹을 편집해 확인해 주세요."; return
+        }
+        guard canChangeFiles else { return }
+        isPreparingChange = true
+        defer { isPreparingChange = false }
+        let all = allInstallations, managed = automaticRoots, protected = registeredRoots
+        let onItems = skills.filter { keepOn.contains($0.id) }.flatMap(\.installations)
+        let offItems = skills.filter { turnOff.contains($0.id) }.flatMap(\.installations)
+        do {
+            let plan = try await Task.detached(priority: .userInitiated) {
+                let on = try LibraryService.plan(title: group.name, installations: onItems, enabled: true, allInstallations: all, managedRoots: managed, protectedRoots: protected)
+                let off = try LibraryService.plan(title: group.name, installations: offItems, enabled: false, allInstallations: all, managedRoots: managed, protectedRoots: protected)
+                return MutationPlan(title: "\(group.name) · \(enabled ? "켜기" : "끄기")", installations: off.installations + on.installations)
+            }.value
+            if plan.installations.isEmpty {
+                var updated = preferences; updated.activeGroupIDs = targetIDs
+                if savePreferences(updated) { libraryMessage = "그룹 선택을 저장했습니다. 필요한 파일 변경은 없습니다." }
+            } else {
+                mutationPreview = plan
+                pendingActiveGroupIDs = targetIDs
+            }
+        } catch { libraryMessage = error.localizedDescription }
+    }
+    func applyPreview() async {
+        guard let plan = mutationPreview, canChangeFiles else { return }
+        isMutating = true
+        do {
+            try await libraryService.apply(plan, roots: registeredRoots)
+            if let ids = pendingActiveGroupIDs {
+                var updated = preferences; updated.activeGroupIDs = ids; _ = savePreferences(updated)
+            }
+            libraryMessage = "파일 변경을 완료했습니다. 에이전트의 새 대화에서 반영 여부를 확인하세요."
+            mutationPreview = nil; pendingActiveGroupIDs = nil
+        } catch { libraryMessage = error.localizedDescription; mutationPreview = nil; pendingActiveGroupIDs = nil }
+        isMutating = false
+        await rescan()
+    }
+    func cancelPreview() { mutationPreview = nil; pendingActiveGroupIDs = nil }
+    func recoverChanges() async {
+        guard !isScanning, !isMutating, !isPreparingChange else { return }
+        isMutating = true
+        do { try await libraryService.recover(roots: registeredRoots); libraryMessage = "중단된 파일 변경을 마쳤습니다." }
+        catch { libraryMessage = error.localizedDescription }
+        isMutating = false
+        await rescan()
     }
 }

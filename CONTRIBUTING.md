@@ -15,8 +15,8 @@ Use macOS 26+ and Xcode 26+ with Swift 6.2+. Open `AgentHarnessManager.xcodeproj
 No Apple team is required for the default ad-hoc signing setup. To customize your local identity, create `Config/Local.xcconfig`, which is ignored by Git:
 
 ```xcconfig
-AGENT_SKILL_MANAGER_BUNDLE_ID = org.example.agentpluginmanager
-AGENT_SKILL_MANAGER_BUNDLE_ID[config=Debug] = org.example.agentpluginmanager.dev
+AGENT_SKILL_MANAGER_BUNDLE_ID = org.example.agentharnessmanager
+AGENT_SKILL_MANAGER_BUNDLE_ID[config=Debug] = org.example.agentharnessmanager.dev
 // DEVELOPMENT_TEAM = <your-Apple-team-id>
 ```
 
@@ -52,7 +52,7 @@ For UI changes, also inspect the native app in light and dark mode and verify ke
 - Keep changes focused and explain the user-visible result and relevant checks.
 - Reuse existing types and platform controls; add dependencies only for a demonstrated need.
 - Preserve separate identities for copies and links. Catalog discovery must not imply that an agent loaded a skill.
-- Keep user skill files unchanged in the current implementation. File-changing features need explicit previews, conflict handling, recovery, and tests before they can reach user files.
+- Keep discovery, reading, metadata editing, and group selection free of file changes. File switches require explicit previews, conflict handling, durable recovery, and tests. Exercise writes only with synthetic temporary skills during development checks.
 - Update both [README.md](README.md) and [README.ko.md](README.ko.md) when behavior or setup changes. Detailed design notes may remain in Korean; new contributor-facing documentation should be in English.
 - Use synthetic examples and original assets in new documentation. Link to third-party reference material instead of copying it into the repository.
 

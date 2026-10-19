@@ -2,23 +2,23 @@
 
 [한국어](README.ko.md)
 
-A native macOS app for browsing agent skills and saving the skill selections you use for different tasks. Built with SwiftUI, starting with Codex and Claude Code.
+A native macOS library for agent skills, built with SwiftUI. Browse skills and their installation locations, organize groups, and review file changes before applying them. Starts with Codex and Claude Code.
 
-**Early development:** the app currently reads local `SKILL.md` files and saves work configurations. Plugin installation, updates, and MCP, hook, and instruction management are planned. The app interface is currently in Korean.
+**Early development:** the interface uses a sidebar, list, and persistent detail column. Visual styling remains our own. AI review, automatic grouping, plugin installation, and MCP/hook/instruction management are not implemented. The app interface is currently in Korean.
 
 ## What works today
 
-- Browse skills in `~/.agents/skills` and `~/.claude/skills`, plus folders you register yourself.
-- Browse repositories in the source sidebar, with installed-entry counts and an unknown-source section. Search by name, source, or path; combine source, agent, installation location, and symbolic-link filters.
-- Agent and location filters stay in sync: choosing an agent lists only its registered locations; choosing a location selects its agent. Changing agents clears an incompatible location. “All locations” retains the selected agent; “All agents” clears the location. Location choices stay available even when a source or search has no matching skills. Locations are shown only in the top filter; manage paths in Settings.
-- Classify supported global installation receipts automatically, or connect a repository manually in the skill detail view. Manual associations can be edited or removed.
-- View raw `SKILL.md` content and report missing folders, access failures, and incomplete scans.
-- Manage default and additional paths together in Settings. Default paths are fixed; additional paths can be edited or removed without changing their files.
-- Create, edit, and delete work configurations. Import selections from another configuration as a snapshot; later edits to the source do not affect your saved configuration.
-- Keep references to skills that disappear from the catalog, and restore configurations and settings after relaunch.
-- Use the system appearance or choose light or dark mode.
+- Browse registered skill folders using summary filters, agent and location filters, repository sources, search, and a link-only filter.
+- Inspect a logical skill and its installations together. A discovered direct source and links to it share a row; independent same-name copies remain separate. “Variants” compares readable `SKILL.md` hashes for same-name skills, not their entire resource directories.
+- Read original documents, inspect installation paths and provenance, and save favorites.
+- Create, edit, and delete groups. Existing work configurations are imported once, with original notes and missing references preserved in the legacy view.
+- Switch groups together or turn other groups off. Overlapping members remain enabled for another active group; ungrouped skills are unaffected.
+- Enable or disable independent skill directories directly inside the two default roots after a change preview. Links, shared readers, nested or custom locations, and protected provider caches remain read-only. A fresh scan and identity/content checks run before applying changes.
+- Keep a durable journal, reject destination collisions, and resume interrupted changes. A pending operation blocks other writes until recovery succeeds.
+- Inspect local document/metadata/path findings and save up to 50 review snapshots, with hashes and a current-state comparison. This is a local check, not AI review.
+- Manage paths and system/light/dark appearance in Settings. Removing a registered path does not remove files.
 
-Saving a configuration does **not** enable, disable, move, or delete skills. A discovered file is not proof that an agent has loaded it. Other agents can be registered by name and folder for `SKILL.md` browsing; their runtime compatibility is not verified.
+Group activation selections are separate from actual installation state. Group editing and favorites change metadata only. File switches require a separate preview and Apply action. Discovered or enabled files do not prove that an agent loaded them into its current conversation.
 
 ## Build and run
 
@@ -51,26 +51,30 @@ Personal signing settings belong in the ignored `Config/Local.xcconfig`. See [CO
 
 ## Use it
 
-1. Open Settings (`⌘,`) to check the default skill folders or add a folder containing a `SKILL.md` file or a collection of skills.
-2. Choose a source in the sidebar, narrow the list by agent or installation location, and open an entry to read `SKILL.md` or reveal it in Finder. Use “출처 연결…” in the detail view for an unknown source. Refresh with `⌘R` after external changes.
-3. Create a work configuration and select skills for that task. Use “다른 구성에서 가져오기” to reuse selections from another configuration. Import is blocked if any source skill is missing from the current catalog.
+1. Open Settings (`⌘,`) to inspect the default roots or add a folder for browsing.
+2. Choose a summary filter, agent, or group in the sidebar; select a skill in the middle list to read its locations, groups, provenance, and original document on the right. Refresh with `⌘R` after external changes.
+3. Create a group with “새 그룹”. Use “모든 그룹” to edit membership or request a group switch; select whether other groups should remain enabled.
+4. Request a supported file switch, review every source and destination, then choose Apply. If interrupted, resolve any reported conflict and use “복구 재시도” to finish the recorded operation.
+5. Refresh and choose “검사” to save a local review snapshot; open its history entry to inspect the saved evidence.
 
 ## Local data and file access
 
-The app stores work configurations, manual source associations, additional paths, and appearance preferences locally in `UserDefaults`. The current app has no accounts, telemetry, or network requests and does not execute skill scripts.
+The app stores groups, favorites, local review history, legacy work configurations, manual source associations, additional paths, and appearance preferences locally in `UserDefaults`. Group migration leaves the original work-configuration bytes intact. Corrupt group/review/provenance data is preserved and its writes are blocked. The current app has no accounts, telemetry, or network requests and does not execute skill scripts.
+
+File changes use `~/Library/Application Support/<bundle-id>/Library/library-journal.json`, protected by an exclusive lock and atomic, synced journal writes. Disabled folders are moved to unique `.ahm-disabled-<UUID>` siblings of the discovery root (for example, under `~/.agents`, outside `~/.agents/skills`) on the same volume, and are read through their journal records. The original installation identity survives disable/restore. Keep the journal and these folders when backing up or removing the app while skills are disabled. Interrupted operations resume the recorded plan; completed-operation undo and force recovery are not implemented.
 
 The scanner reads registered roots. Raw content is limited to regular UTF-8 files up to 2 MiB; link targets outside registered roots are blocked. Scans are bounded at depth 8 and 10,000 candidates per root and report partial results. These are app limits, not agent specifications.
 
 Source classification reads the optional version-3 [Vercel Skills installation receipt](https://github.com/vercel-labs/skills/blob/main/src/skill-lock.ts) at `~/.agents/.skill-lock.json`. It associates supported GitHub/Git records only with the corresponding real directory under `~/.agents/skills` and registered entries resolving to that directory. Same-name copies in other locations remain unknown. Metadata reads reject symlinks and special files and use the same 2 MiB limit. Alternate `XDG_STATE_HOME` receipt locations, project receipts, and plugin receipts are not currently supported.
 
-“설치 기록” means an installation receipt; “직접 연결” means a local user association. Neither verifies the current files against the remote repository. Counts include separate installed copies and links, not the number of skills available remotely. Manual associations are tied to the discovered installation identity; replacing a directory does not transfer its association. Removing a manual override restores the receipt source if one exists. Source selection and metadata edits do not change work configurations or skill files.
+“설치 기록” means an installation receipt; “직접 연결” means a local user association. Neither verifies the current files against the remote repository. Installation counts include separate installed copies and links; logical-skill counts distinguish shared source rows. Neither is the number of skills available remotely. A mixed skill can appear in both On and Off filters. Manual associations are tied to the discovered installation identity; replacing a directory does not transfer its association. Removing a manual override restores the receipt source if one exists. Manual associations survive disable/restore. Automatic receipt provenance may be unavailable while a folder is in storage; it is verified again after restoration. Source selection and metadata edits do not change skill files.
 
 Legacy bundle IDs (`forked.agentskillmanager.local` and `.dev`) are retained to preserve existing settings after the rename. See [Config/Base.xcconfig](Config/Base.xcconfig).
 
 ## Roadmap
 
 - Extend verified discovery rules, provenance formats, and plugin membership.
-- Add safe skill changes with previews, conflict checks, and recovery before connecting writes to user files.
+- Extend file-switch support beyond independent default-root directories; add completed-operation undo, broader recovery tools, AI review, and automatic grouping.
 - Add plugin installation and updates through verified agent-supported workflows, then support MCP servers, hooks, and instructions where applicable.
 - Complete accessibility and distribution validation.
 
