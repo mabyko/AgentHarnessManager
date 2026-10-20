@@ -101,7 +101,7 @@ struct ContentView: View {
             }
             if store.page == .library { LibraryFilters() }
             if store.page == .groups {
-                Picker("그룹 전환", selection: Binding(get: { store.preferences.groupSelectionMode }, set: store.setGroupMode)) {
+                Picker("그룹 전환", selection: Binding(get: { store.preferences.groupSelectionMode }, set: { store.setGroupMode($0) })) {
                     Text("여러 그룹 함께 켜기").tag(GroupSelectionMode.multiple)
                     Text("다른 그룹 끄기").tag(GroupSelectionMode.single)
                 }.disabled(!store.metadataIsEditable)
