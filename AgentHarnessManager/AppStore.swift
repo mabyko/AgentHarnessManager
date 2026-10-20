@@ -4,7 +4,7 @@ import Foundation
 import SkillCore
 
 enum AppPage: String, CaseIterable, Identifiable {
-    case library, findings, groups, history, profiles
+    case library, findings, groups, history, changes, profiles
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -13,6 +13,7 @@ enum AppPage: String, CaseIterable, Identifiable {
         case .profiles: "이전 작업 구성"
         case .groups: "그룹"
         case .history: "검사 이력"
+        case .changes: "변경 이력"
         }
     }
     var symbol: String {
@@ -22,6 +23,7 @@ enum AppPage: String, CaseIterable, Identifiable {
         case .profiles: "slider.horizontal.3"
         case .groups: "folder"
         case .history: "clock.arrow.circlepath"
+        case .changes: "arrow.left.arrow.right"
         }
     }
 }
@@ -59,8 +61,8 @@ final class AppStore {
     var selectedGroupID: UUID?
     var selectedFindingID: String?
     var selectedReviewID: UUID?
+    var selectedMutationID: UUID?
     var mutationPreview: MutationPlan?
-    private var pendingActiveGroupIDs: Set<UUID>?
     var libraryMessage: String?
     private(set) var preferences = AppPreferences()
     private(set) var preferencesLoadFailed = false
@@ -70,6 +72,7 @@ final class AppStore {
     private(set) var currentReview = ReviewRecord(skills: [], roots: [])
     private(set) var journal = LibraryJournal()
     private(set) var journalLoadFailed = false
+    private(set) var groupSyncFailed = false
     private(set) var isMutating = false
     private(set) var isPreparingChange = false
     @ObservationIgnored private let libraryService: LibraryService
@@ -357,6 +360,7 @@ final class AppStore {
         snapshot = result
         skills = library
         journal = saved
+        reconcileGroupSelection()
         currentReview = ReviewRecord(skills: library, roots: problemRoots)
         migrateProfiles()
         installerSources = sources.repositories
@@ -368,7 +372,7 @@ final class AppStore {
     }
 
     func chooseSkillFolder(agent: SkillAgent, name: String, replacing existing: DiscoveryRoot? = nil) async {
-        guard !isScanning, !isMutating, !isPreparingChange else { return }
+        guard canEditRoots else { return }
         let panel = NSOpenPanel()
         panel.title = existing == nil ? "스킬 폴더 추가" : "스킬 경로 수정"
         panel.message = "SKILL.md를 포함한 스킬들이 있는 폴더를 선택하세요. 선택한 폴더만 읽으며 파일을 변경하지 않습니다."
@@ -382,7 +386,7 @@ final class AppStore {
 
     @discardableResult
     func addRoot(url: URL, agent: SkillAgent, name: String, replacing existing: DiscoveryRoot? = nil) -> Bool {
-        guard !isScanning, !isMutating, !isPreparingChange else { return false }
+        guard canEditRoots else { return false }
         if let existing {
             guard additionalRoots.contains(where: { $0.id == existing.id }), existing.agent == agent else {
                 settingsMessage = "추가로 등록한 경로만 수정할 수 있습니다."
@@ -409,7 +413,7 @@ final class AppStore {
     }
 
     func removeRoot(_ root: DiscoveryRoot) async {
-        guard !isScanning, !isMutating, !isPreparingChange, additionalRoots.contains(where: { $0.id == root.id }) else { return }
+        guard canEditRoots, additionalRoots.contains(where: { $0.id == root.id }) else { return }
         guard !journal.disabled.contains(where: { $0.location.id == root.id }), journal.pending == nil else {
             settingsMessage = "보관 중인 설치 항목을 복원하고 중단된 변경을 해결한 뒤 경로를 해제해 주세요."; return
         }
@@ -466,8 +470,16 @@ extension AppStore {
     var filteredFindings: [ReviewFinding] { currentFindings.filter { matchesSearch("\($0.title) \($0.evidence) \($0.path)") } }
     var filteredReviews: [ReviewRecord] { reviews.filter { matchesSearch("\($0.provider) \($0.date.formatted())") } }
     var selectedReview: ReviewRecord? { reviews.first { $0.id == selectedReviewID } }
-    var metadataIsEditable: Bool { hasScanned && !isScanning && !isMutating && !isPreparingChange && !preferencesLoadFailed }
-    var canChangeFiles: Bool { hasScanned && !isScanning && !isMutating && !isPreparingChange && !journalLoadFailed && journal.pending == nil }
+    var metadataIsEditable: Bool { hasScanned && !isScanning && !isMutating && !isPreparingChange && !preferencesLoadFailed && !journalLoadFailed && !groupSyncFailed && journal.pending == nil && mutationPreview == nil }
+    var canChangeFiles: Bool { hasScanned && !isScanning && !isMutating && !isPreparingChange && !journalLoadFailed && !groupSyncFailed && journal.pending == nil }
+    var canEditRoots: Bool { !isScanning && !isMutating && !isPreparingChange && !journalLoadFailed && !groupSyncFailed && journal.pending == nil && mutationPreview == nil }
+    var mutations: [MutationPlan] { (journal.pending.map { [$0] } ?? []) + journal.completed }
+    var filteredMutations: [MutationPlan] {
+        mutations.filter { plan in
+            matchesSearch(([plan.title] + plan.installations.flatMap { [$0.installation.name, $0.source, $0.destination] }).joined(separator: " "))
+        }
+    }
+    var selectedMutation: MutationPlan? { mutations.first { $0.id == selectedMutationID } }
     var hasVariantNames: Set<String> {
         Set(Dictionary(grouping: skills, by: \.name).filter { Set($0.value.flatMap(\.installations).compactMap(\.contentHash)).count > 1 }.keys)
     }
@@ -548,6 +560,22 @@ extension AppStore {
             preferences = updated; return true
         } catch { libraryMessage = "그룹·즐겨찾기를 저장할 수 없습니다."; return false }
     }
+    private func reconcileGroupSelection() {
+        groupSyncFailed = false
+        guard !journalLoadFailed, let committed = journal.groupSelection,
+              preferences.lastAppliedGroupChangeID != committed.id else { return }
+        guard !preferencesLoadFailed,
+              committed.change.after.isSubset(of: Set(groups.map(\.id))),
+              preferences.activeGroupIDs == committed.change.before || preferences.activeGroupIDs == committed.change.after else {
+            groupSyncFailed = true
+            libraryMessage = "파일 변경은 기록되어 있지만 그룹 선택 설정과 맞지 않습니다. 기존 설정과 기록을 보존했습니다. 설정을 복원한 뒤 앱을 다시 실행해 주세요."
+            return
+        }
+        var updated = preferences
+        updated.activeGroupIDs = committed.change.after
+        updated.lastAppliedGroupChangeID = committed.id
+        groupSyncFailed = !savePreferences(updated)
+    }
     private func migrateProfiles() {
         guard !preferencesLoadFailed, !profilesLoadFailed else { return }
         let map = Dictionary(allInstallations.map { ($0.entry.id, "skill:" + $0.id) }, uniquingKeysWith: { first, _ in first })
@@ -581,7 +609,6 @@ extension AppStore {
     }
     func prepareChange(title: String, installations: [SkillInstallation], enabled: Bool) async {
         guard canChangeFiles else { libraryMessage = "검사 또는 복구를 마친 뒤 변경할 수 있습니다."; return }
-        pendingActiveGroupIDs = nil
         isPreparingChange = true
         defer { isPreparingChange = false }
         let all = allInstallations, managed = automaticRoots, protected = registeredRoots
@@ -612,36 +639,63 @@ extension AppStore {
         let all = allInstallations, managed = automaticRoots, protected = registeredRoots
         let onItems = skills.filter { keepOn.contains($0.id) }.flatMap(\.installations)
         let offItems = skills.filter { turnOff.contains($0.id) }.flatMap(\.installations)
+        let selection = GroupSelectionChange(before: preferences.activeGroupIDs, after: targetIDs, previousChangeID: journal.groupSelection?.id)
         do {
             let plan = try await Task.detached(priority: .userInitiated) {
                 let on = try LibraryService.plan(title: group.name, installations: onItems, enabled: true, allInstallations: all, managedRoots: managed, protectedRoots: protected)
                 let off = try LibraryService.plan(title: group.name, installations: offItems, enabled: false, allInstallations: all, managedRoots: managed, protectedRoots: protected)
-                return MutationPlan(title: "\(group.name) · \(enabled ? "켜기" : "끄기")", installations: off.installations + on.installations)
+                return MutationPlan(title: "\(group.name) · \(enabled ? "켜기" : "끄기")", installations: off.installations + on.installations, groupSelection: selection)
             }.value
             if plan.installations.isEmpty {
-                var updated = preferences; updated.activeGroupIDs = targetIDs
-                if savePreferences(updated) { libraryMessage = "그룹 선택을 저장했습니다. 필요한 파일 변경은 없습니다." }
+                if selection.before == selection.after { libraryMessage = "이미 요청한 그룹 상태입니다."; return }
+                try await libraryService.apply(plan, roots: registeredRoots)
+                selectedMutationID = plan.id
+                isPreparingChange = false
+                await rescan()
+                if !groupSyncFailed { libraryMessage = "그룹 선택을 저장했습니다. 필요한 파일 변경은 없습니다." }
             } else {
                 mutationPreview = plan
-                pendingActiveGroupIDs = targetIDs
             }
         } catch { libraryMessage = error.localizedDescription }
     }
     func applyPreview() async {
         guard let plan = mutationPreview, canChangeFiles else { return }
+        if let selection = plan.groupSelection {
+            guard !preferencesLoadFailed, selection.before == preferences.activeGroupIDs,
+                  selection.after.isSubset(of: Set(groups.map(\.id))) else {
+                cancelPreview(); libraryMessage = "그룹 선택이 바뀌었습니다. 새 계획을 검토해 주세요."; return
+            }
+        }
         isMutating = true
         do {
             try await libraryService.apply(plan, roots: registeredRoots)
-            if let ids = pendingActiveGroupIDs {
-                var updated = preferences; updated.activeGroupIDs = ids; _ = savePreferences(updated)
-            }
-            libraryMessage = "파일 변경을 완료했습니다. 에이전트의 새 대화에서 반영 여부를 확인하세요."
-            mutationPreview = nil; pendingActiveGroupIDs = nil
-        } catch { libraryMessage = error.localizedDescription; mutationPreview = nil; pendingActiveGroupIDs = nil }
+            selectedMutationID = plan.id
+            libraryMessage = plan.undoes == nil ? "변경을 완료했습니다. 변경 이력에서 확인할 수 있습니다." : "되돌리기를 완료했습니다. 원래 작업과 실행 기록을 함께 보존했습니다."
+            mutationPreview = nil
+        } catch { libraryMessage = error.localizedDescription; mutationPreview = nil }
         isMutating = false
         await rescan()
     }
-    func cancelPreview() { mutationPreview = nil; pendingActiveGroupIDs = nil }
+    func cancelPreview() { mutationPreview = nil }
+    func undoUnavailableReason(for plan: MutationPlan) -> String? {
+        if let reason = journal.undoUnavailableReason(for: plan.id) { return reason }
+        if let selection = plan.groupSelection {
+            if preferencesLoadFailed || preferences.activeGroupIDs != selection.after || !selection.before.isSubset(of: Set(groups.map(\.id))) {
+                return "그룹 선택이나 그룹 목록이 변경되어 이전 선택을 복원할 수 없습니다."
+            }
+        }
+        return nil
+    }
+    func prepareUndo(_ plan: MutationPlan) async {
+        guard canChangeFiles, mutationPreview == nil else { return }
+        if let reason = undoUnavailableReason(for: plan) { libraryMessage = reason; return }
+        isPreparingChange = true
+        defer { isPreparingChange = false }
+        do {
+            mutationPreview = try await libraryService.planUndo(id: plan.id, roots: registeredRoots)
+            libraryMessage = nil
+        } catch { libraryMessage = error.localizedDescription }
+    }
     func recoverChanges() async {
         guard !isScanning, !isMutating, !isPreparingChange else { return }
         isMutating = true

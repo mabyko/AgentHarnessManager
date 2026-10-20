@@ -1,3 +1,4 @@
+import CryptoKit
 import Darwin
 import Foundation
 
@@ -8,7 +9,7 @@ public struct DirectoryIdentity: Codable, Hashable, Sendable {
     func matches(_ info: stat) -> Bool { device == info.st_dev && inode == info.st_ino }
 }
 
-public struct DisabledInstallation: Codable, Identifiable, Sendable {
+public struct DisabledInstallation: Codable, Identifiable, Equatable, Sendable {
     public let id: String
     public let name: String
     public let originalPath: String
@@ -26,20 +27,42 @@ public struct DisabledInstallation: Codable, Identifiable, Sendable {
     }
 }
 
-public struct Move: Codable, Identifiable, Sendable {
+public struct Move: Codable, Identifiable, Equatable, Sendable {
     public let installation: DisabledInstallation
     public let enabled: Bool
     public let contentHash: String
+    public var treeHash: String? = nil
     public var id: String { installation.id }
     public var source: String { enabled ? installation.currentPath : installation.originalPath }
     public var destination: String { enabled ? installation.originalPath : installation.currentPath }
+}
+
+public struct GroupSelectionChange: Codable, Equatable, Sendable {
+    public let before: Set<UUID>
+    public let after: Set<UUID>
+    public let previousChangeID: UUID?
+    public init(before: Set<UUID>, after: Set<UUID>, previousChangeID: UUID?) {
+        self.before = before; self.after = after; self.previousChangeID = previousChangeID
+    }
+}
+
+public struct GroupSelectionCommit: Codable, Sendable {
+    public let id: UUID
+    public let change: GroupSelectionChange
 }
 
 public struct MutationPlan: Codable, Identifiable, Sendable {
     public let id: UUID
     public let title: String
     public let installations: [Move]
-    public init(title: String, installations: [Move]) { id = UUID(); self.title = title; self.installations = installations }
+    public let createdAt: Date?
+    public var completedAt: Date?
+    public let undoes: UUID?
+    public let groupSelection: GroupSelectionChange?
+    public init(title: String, installations: [Move], undoes: UUID? = nil, groupSelection: GroupSelectionChange? = nil) {
+        id = UUID(); self.title = title; self.installations = installations; createdAt = .now
+        self.undoes = undoes; self.groupSelection = groupSelection
+    }
 }
 
 public struct LibraryJournal: Codable, Sendable {
@@ -47,7 +70,26 @@ public struct LibraryJournal: Codable, Sendable {
     public var disabled: [DisabledInstallation] = []
     public var pending: MutationPlan?
     public var completed: [MutationPlan] = []
+    public var groupSelection: GroupSelectionCommit?
     public init() {}
+
+    /// History checks are cheap; filesystem checks still run before preview and again before applying.
+    public func undoUnavailableReason(for id: UUID) -> String? {
+        guard pending == nil else { return "중단된 변경을 먼저 복구해 주세요." }
+        guard let index = completed.firstIndex(where: { $0.id == id }) else { return "완료 기록을 찾을 수 없습니다." }
+        let original = completed[index]
+        guard original.undoes == nil else { return "되돌리기 실행 기록은 다시 되돌릴 수 없습니다." }
+        guard !completed.contains(where: { $0.undoes == id }) else { return "이미 되돌린 작업입니다." }
+        guard original.installations.allSatisfy({ $0.treeHash != nil }) else { return "이전 형식의 기록에는 포함 파일 지문이 없어 되돌릴 수 없습니다." }
+        let paths = Set(original.installations.map { $0.installation.originalPath })
+        if completed.prefix(index).contains(where: { later in
+            later.installations.contains { paths.contains($0.installation.originalPath) }
+        }) { return "같은 설치 위치에 이후 변경이 있습니다. 이전 작업을 되돌릴 수 없습니다." }
+        if original.groupSelection != nil, groupSelection?.id != original.id {
+            return "이후 그룹 선택이 변경되어 이전 그룹 작업을 되돌릴 수 없습니다."
+        }
+        return nil
+    }
 }
 
 /// Only independent, direct child directories in the two default skill roots can be moved outside discovery roots.
@@ -109,7 +151,7 @@ public actor LibraryService {
                 currentPath: destination, location: item.location, physicalParent: physical,
                 parentIdentity: DirectoryIdentity(parent), physicalStorageParent: storagePath,
                 storageParentIdentity: DirectoryIdentity(storageInfo), identity: DirectoryIdentity(info))
-            let move = Move(installation: saved, enabled: enabled, contentHash: hash)
+            let move = Move(installation: saved, enabled: enabled, contentHash: hash, treeHash: try hashTree(directory))
             try validate(move, roots: managedRoots, allowCompleted: false)
             moves.append(move)
         }
@@ -129,13 +171,53 @@ public actor LibraryService {
             var journal = try readJournal(directory)
             try validateJournal(journal, roots: roots)
             guard journal.pending == nil else { throw Self.failure("중단된 변경이 있습니다. 먼저 복구를 완료해 주세요.") }
-            guard !plan.installations.isEmpty else { return }
+            guard Set(plan.installations.map(\.id)).count == plan.installations.count,
+                  Set(plan.installations.map { $0.installation.originalPath }).count == plan.installations.count else {
+                throw Self.failure("변경 계획에 중복 설치 위치가 있습니다. 다시 검토해 주세요.")
+            }
+            guard !journal.completed.contains(where: { $0.id == plan.id }) else { throw Self.failure("이미 적용한 변경 계획입니다.") }
+            if let id = plan.undoes {
+                let expected = try Self.undoPlan(id: id, journal: journal)
+                guard plan.installations == expected.installations, plan.groupSelection == expected.groupSelection else {
+                    throw Self.failure("되돌리기 계획이 바뀌었습니다. 다시 검토해 주세요.")
+                }
+            }
+            if let change = plan.groupSelection {
+                guard change.previousChangeID == journal.groupSelection?.id,
+                      journal.groupSelection == nil || journal.groupSelection?.change.after == change.before else {
+                    throw Self.failure("그룹 선택이 다른 실행에서 변경되었습니다. 새로고침한 뒤 다시 검토해 주세요.")
+                }
+            }
+            guard !plan.installations.isEmpty || plan.groupSelection != nil else { return }
             for move in plan.installations { try Self.validate(move, roots: roots, allowCompleted: false) }
             try Self.checkReaders(plan, roots: roots)
             journal.pending = plan
             try writeJournal(journal, directory: directory)
             try finish(&journal, directory: directory, roots: roots)
         }
+    }
+
+    public func planUndo(id: UUID, roots: [DiscoveryRoot]) throws -> MutationPlan {
+        try locked { directory in
+            let journal = try readJournal(directory)
+            try validateJournal(journal, roots: roots)
+            let plan = try Self.undoPlan(id: id, journal: journal)
+            for move in plan.installations { try Self.validate(move, roots: roots, allowCompleted: false) }
+            try Self.checkReaders(plan, roots: roots)
+            return plan
+        }
+    }
+
+    private static func undoPlan(id: UUID, journal: LibraryJournal) throws -> MutationPlan {
+        if let reason = journal.undoUnavailableReason(for: id) { throw failure(reason) }
+        guard let original = journal.completed.first(where: { $0.id == id }) else { throw failure("완료 기록을 찾을 수 없습니다.") }
+        let moves = original.installations.reversed().map {
+            Move(installation: $0.installation, enabled: !$0.enabled, contentHash: $0.contentHash, treeHash: $0.treeHash)
+        }
+        let selection = original.groupSelection.map {
+            GroupSelectionChange(before: $0.after, after: $0.before, previousChangeID: journal.groupSelection?.id)
+        }
+        return MutationPlan(title: original.title + " · 되돌리기", installations: moves, undoes: id, groupSelection: selection)
     }
 
     public func recover(roots: [DiscoveryRoot]) throws {
@@ -175,8 +257,11 @@ public actor LibraryService {
             journal.disabled.removeAll { $0.id == move.id }
             if !move.enabled { journal.disabled.append(move.installation) }
         }
-        journal.completed.insert(plan, at: 0)
+        var completed = plan
+        completed.completedAt = .now
+        journal.completed.insert(completed, at: 0)
         journal.completed = Array(journal.completed.prefix(100))
+        if let change = plan.groupSelection { journal.groupSelection = GroupSelectionCommit(id: plan.id, change: change) }
         journal.pending = nil
         try writeJournal(journal, directory: directory)
     }
@@ -196,7 +281,9 @@ public actor LibraryService {
     }
 
     private func validateJournal(_ journal: LibraryJournal, roots: [DiscoveryRoot]) throws {
-        guard journal.version == 1, Set(journal.disabled.map(\.id)).count == journal.disabled.count else {
+        guard journal.version == 1, Set(journal.disabled.map(\.id)).count == journal.disabled.count,
+              Set(journal.completed.map(\.id)).count == journal.completed.count,
+              journal.pending.map({ Set($0.installations.map(\.id)).count == $0.installations.count }) ?? true else {
             throw Self.failure("변경 기록 형식을 확인할 수 없습니다. 기존 데이터를 보존하고 파일 변경을 잠갔습니다.")
         }
         for saved in journal.disabled + (journal.pending?.installations.map(\.installation) ?? []) {
@@ -205,6 +292,7 @@ public actor LibraryService {
     }
 
     private static func checkReaders(_ plan: MutationPlan, roots: [DiscoveryRoot]) throws {
+        guard plan.installations.contains(where: { !$0.enabled }) else { return }
         let snapshot = SkillCatalog.scan(roots: roots)
         guard snapshot.roots.allSatisfy({ $0.status == .available || $0.status == .missing }) else {
             throw failure("공유 링크에 미치는 영향을 확인할 수 없습니다. 경로 문제를 해결한 뒤 다시 시도해 주세요.")
@@ -267,6 +355,9 @@ public actor LibraryService {
         guard fstat(child, &opened) == 0, saved.identity.matches(opened), try hashDocument(child) == move.contentHash else {
             throw failure("검토 후 설치 항목이나 SKILL.md가 바뀌었습니다. 변경을 멈췄습니다.")
         }
+        if let expected = move.treeHash, try hashTree(child) != expected {
+            throw failure("검토 또는 실행 후 포함 파일이 바뀌었습니다. 변경을 멈췄습니다.")
+        }
     }
 
     private static func hashDocument(_ directory: Int32) throws -> String {
@@ -276,6 +367,90 @@ public actor LibraryService {
         let data = try readRegular(file)
         guard let text = String(data: data, encoding: .utf8) else { throw failure("SKILL.md가 UTF-8 문서가 아닙니다.") }
         return LibraryCatalog.digest(text)
+    }
+
+    /// Hash link text without following it. Bound work and reject special files rather than reading them.
+    private static func hashTree(_ directory: Int32) throws -> String {
+        var hasher = SHA256(), entries = 0, bytes = 0
+        func frame(_ value: String) {
+            let data = Data(value.utf8)
+            hasher.update(data: Data("\(data.count):".utf8)); hasher.update(data: data)
+        }
+        func unchanged(_ before: stat, _ after: stat) -> Bool {
+            before.st_dev == after.st_dev && before.st_ino == after.st_ino && before.st_mode == after.st_mode
+                && before.st_size == after.st_size
+                && before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec && before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec
+                && before.st_ctimespec.tv_sec == after.st_ctimespec.tv_sec && before.st_ctimespec.tv_nsec == after.st_ctimespec.tv_nsec
+        }
+        func visit(_ fd: Int32, depth: Int) throws {
+            guard depth <= 32 else { throw failure("포함 폴더가 32단계를 넘어 안전하게 변경할 수 없습니다.") }
+            var before = stat(), after = stat()
+            guard fstat(fd, &before) == 0 else { throw failure("포함 폴더를 확인할 수 없습니다.") }
+            // A new descriptor gives each traversal an independent directory offset.
+            let listing = openat(fd, ".", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            guard listing >= 0 else { throw failure("포함 파일 목록을 열 수 없습니다.") }
+            guard let stream = fdopendir(listing) else { close(listing); throw failure("포함 파일 목록을 읽을 수 없습니다.") }
+            defer { closedir(stream) }
+            var names: [String] = []
+            while true {
+                errno = 0
+                guard let entry = readdir(stream) else {
+                    guard errno == 0 else { throw failure("포함 파일 목록을 끝까지 읽을 수 없습니다.") }
+                    break
+                }
+                guard let name = withUnsafeBytes(of: entry.pointee.d_name, { raw in
+                    raw.firstIndex(of: 0).flatMap { String(bytes: raw.prefix($0), encoding: .utf8) }
+                }) else { throw failure("포함 파일 이름을 UTF-8로 확인할 수 없습니다.") }
+                if name == "." || name == ".." { continue }
+                entries += 1
+                guard entries <= 10_000 else { throw failure("포함 항목이 10,000개를 넘어 안전하게 변경할 수 없습니다.") }
+                names.append(name)
+            }
+            frame("directory:\(before.st_mode)")
+            for name in names.sorted(by: { $0.utf8.lexicographicallyPrecedes($1.utf8) }) {
+                var info = stat(), observed = stat()
+                guard fstatat(fd, name, &info, AT_SYMLINK_NOFOLLOW) == 0 else { throw failure("포함 파일이 검사 중 바뀌었습니다.") }
+                frame(name); frame("\(info.st_mode)")
+                switch info.st_mode & S_IFMT {
+                case S_IFDIR:
+                    let child = openat(fd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+                    guard child >= 0 else { throw failure("포함 폴더를 안전하게 열 수 없습니다.") }
+                    defer { close(child) }
+                    guard fstat(child, &observed) == 0, unchanged(info, observed) else { throw failure("포함 폴더가 교체되었습니다.") }
+                    try visit(child, depth: depth + 1)
+                case S_IFREG:
+                    guard info.st_size >= 0, info.st_size <= 64 * 1_024 * 1_024 - bytes else { throw failure("포함 파일이 64 MiB 한도를 넘어 안전하게 변경할 수 없습니다.") }
+                    bytes += Int(info.st_size)
+                    let file = openat(fd, name, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
+                    guard file >= 0 else { throw failure("포함 파일을 안전하게 읽을 수 없습니다.") }
+                    defer { close(file) }
+                    guard fstat(file, &observed) == 0, unchanged(info, observed) else { throw failure("포함 파일이 교체되었습니다.") }
+                    var digest = SHA256(), buffer = [UInt8](repeating: 0, count: 16_384), readCount = 0
+                    while true {
+                        let count = buffer.withUnsafeMutableBytes { Darwin.read(file, $0.baseAddress, $0.count) }
+                        if count < 0 && errno == EINTR { continue }
+                        guard count >= 0 else { throw failure("포함 파일을 끝까지 읽을 수 없습니다.") }
+                        if count == 0 { break }
+                        readCount += count
+                        guard readCount <= info.st_size else { throw failure("포함 파일이 검사 중 바뀌었습니다.") }
+                        digest.update(data: Data(buffer.prefix(count)))
+                    }
+                    guard readCount == info.st_size, fstat(file, &observed) == 0, unchanged(info, observed) else { throw failure("포함 파일이 검사 중 바뀌었습니다.") }
+                    frame(digest.finalize().map { String(format: "%02x", $0) }.joined())
+                case S_IFLNK:
+                    var buffer = [UInt8](repeating: 0, count: Int(PATH_MAX) + 1)
+                    let count = buffer.withUnsafeMutableBytes { readlinkat(fd, name, $0.baseAddress, $0.count) }
+                    guard count >= 0, count < buffer.count else { throw failure("포함 링크를 확인할 수 없습니다.") }
+                    frame(Data(buffer.prefix(count)).base64EncodedString())
+                default: throw failure("일반 파일·폴더·링크 외의 포함 항목은 안전하게 변경할 수 없습니다.")
+                }
+                guard fstatat(fd, name, &observed, AT_SYMLINK_NOFOLLOW) == 0, unchanged(info, observed) else { throw failure("포함 항목이 검사 중 바뀌었습니다.") }
+            }
+            guard fstat(fd, &after) == 0, unchanged(before, after) else { throw failure("포함 폴더가 검사 중 바뀌었습니다.") }
+            frame("end")
+        }
+        try visit(directory, depth: 0)
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     private func locked<T>(_ body: (Int32) throws -> T) throws -> T {

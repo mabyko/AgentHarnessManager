@@ -21,6 +21,7 @@ struct ContentView: View {
                 case .groups: groupList
                 case .findings: findingList
                 case .history: historyList
+                case .changes: mutationList
                 case .profiles:
                     ContentUnavailableView("이전 작업 구성", systemImage: "archivebox", description: Text("기존 데이터와 메모를 오른쪽에서 확인하세요. 그룹으로 가져온 뒤에도 원본은 보존됩니다."))
                 }
@@ -50,6 +51,9 @@ struct ContentView: View {
                 case .history:
                     if let record = store.selectedReview { ReviewDetail(record: record) }
                     else { selectionPrompt("검사 이력을 선택하세요", symbol: "clock.arrow.circlepath", description: "저장한 검사 시점의 근거와 현재 상태를 비교할 수 있습니다.") }
+                case .changes:
+                    if let plan = store.selectedMutation { MutationDetail(plan: plan) }
+                    else { selectionPrompt("변경 이력을 선택하세요", symbol: "arrow.left.arrow.right", description: "완료·중단된 작업의 이동 경로를 확인하고, 되돌릴 작업을 검토할 수 있습니다.") }
                 case .profiles: ProfilesView()
                 }
             }
@@ -97,6 +101,7 @@ struct ContentView: View {
             }
             if store.page == .findings { Text("로컬 검사 · \(store.filteredFindings.count)건").font(.caption).foregroundStyle(.secondary) }
             if store.page == .history { Text("로컬 검사 이력 · 최근 50회 보관").font(.caption).foregroundStyle(.secondary) }
+            if store.page == .changes { Text("완료 기록 최근 100회 · 중단된 작업 포함").font(.caption).foregroundStyle(.secondary) }
         }.padding(16)
     }
     private var listTitle: String {
@@ -166,6 +171,9 @@ struct ContentView: View {
                 HStack(alignment: .top) {
                     Label(message, systemImage: "info.circle").font(.caption)
                     Spacer(minLength: 4)
+                    if store.selectedMutationID != nil, store.page != .changes {
+                        Button("변경 이력") { store.page = .changes }.font(.caption)
+                    }
                     Button { store.libraryMessage = nil } label: { Label("알림 닫기", systemImage: "xmark") }.labelStyle(.iconOnly).buttonStyle(.plain)
                 }.padding(12)
             }
@@ -180,12 +188,38 @@ struct ContentView: View {
                 HStack {
                     Label("중단된 파일 변경이 있습니다. 기록된 작업을 마쳐야 다른 변경을 할 수 있습니다.", systemImage: "exclamationmark.triangle")
                     Button("복구 재시도") { Task { await store.recoverChanges() } }.disabled(store.isScanning || store.isMutating || store.isPreparingChange)
+                    Button("상세") { store.selectedMutationID = store.journal.pending?.id; store.page = .changes }
                 }.font(.caption).padding(12).background(WorkbenchTheme.warningSurface)
             }
             if store.journal.disabled.contains(where: { !$0.matchesCurrentItem }) {
                 Label("보관 항목의 위치나 식별 정보가 바뀌었습니다. 변경 기록을 보존했습니다. 원래 폴더를 확인하세요.", systemImage: "exclamationmark.triangle").font(.caption).padding(12)
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+    private var mutationList: some View {
+        @Bindable var store = store
+        return List(selection: $store.selectedMutationID) {
+            ForEach(store.filteredMutations) { plan in
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(plan.title, systemImage: plan.undoes == nil ? "arrow.left.arrow.right" : "arrow.uturn.backward")
+                        .fontWeight(.medium).lineLimit(2).foregroundStyle(.primary)
+                    HStack {
+                        Text(store.journal.pending?.id == plan.id ? "복구 필요" : "완료")
+                        if let date = plan.completedAt ?? plan.createdAt {
+                            Text(date, format: .dateTime.month().day().hour().minute())
+                        } else { Text("이전 기록 · 시각 미기록") }
+                    }.font(.caption).foregroundStyle(.secondary)
+                    Text("파일 이동 \(plan.installations.count)건" + (plan.groupSelection == nil ? "" : " · 그룹 선택 변경"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }.padding(.vertical, 6).tag(plan.id)
+            }
+        }.listStyle(.inset).scrollContentBackground(.hidden)
+            .overlay {
+                if store.filteredMutations.isEmpty {
+                    emptyList(store.search.isEmpty ? "변경 기록이 없습니다" : "일치하는 변경 기록이 없습니다",
+                              description: store.search.isEmpty ? "검토 후 적용한 파일 변경과 그룹 선택이 여기에 저장됩니다." : "작업 이름이나 설치 경로로 다시 검색하세요.")
+                }
+            }
     }
     private func groupIsOn(_ group: SkillGroup) -> Bool { store.preferences.activeGroupIDs.contains(group.id) }
     private func emptyList(_ title: String, description: String) -> some View {

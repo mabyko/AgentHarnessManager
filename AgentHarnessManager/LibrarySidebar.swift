@@ -51,7 +51,11 @@ struct LibrarySidebar: View {
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         sectionTitle("검사")
-                        row("이력", symbol: "clock.arrow.circlepath", count: store.reviews.count, selected: store.page == .history) { store.page = .history }
+                        row("검사 이력", symbol: "checkmark.shield", count: store.reviews.count, selected: store.page == .history) { store.page = .history }
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        sectionTitle("파일 변경")
+                        row("변경 이력", symbol: "arrow.left.arrow.right", count: store.mutations.count, selected: store.page == .changes) { store.page = .changes }
                     }
                     if !store.profiles.isEmpty || store.profilesLoadFailed {
                         VStack(alignment: .leading, spacing: 4) {

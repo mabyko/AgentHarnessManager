@@ -73,6 +73,7 @@ public struct AppPreferences: Codable, Sendable {
     public var groups: [SkillGroup] = []
     public var groupSelectionMode: GroupSelectionMode = .multiple
     public var activeGroupIDs: Set<UUID> = []
+    public var lastAppliedGroupChangeID: UUID?
     // Preserve the legacy records in UserDefaults; this mapping makes migration repeatable.
     public var importedProfileIDs: Set<UUID> = []
     public init() {}

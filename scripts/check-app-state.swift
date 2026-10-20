@@ -135,6 +135,7 @@ struct AppStateCheck {
         precondition(AppStore(defaults: defaults, home: home).profiles.isEmpty)
         try await checkSources()
         try await checkLibrary()
+        try await checkChangeHistory()
         print("PASS: profile create/edit/search/reload/delete, missing members preserved, invalid/corrupt state blocked, filters, fixed default paths, additional path edit/delete/reload, import profiles, reject missing members, preserve imported snapshots, no skill file changes")
     }
 
@@ -250,6 +251,80 @@ struct AppStateCheck {
         precondition(restored.rootFilterID == nil && restored.agentFilter == nil && restored.sourceFilterID == repo.id)
         precondition(!restored.availableAgents.contains(.custom), "Removing the last path removes its agent option without losing the source")
         print("PASS: receipt provenance, copies/links, source counts/search, linked agent/location filters, multiple/empty paths, root edit/removal, manual override/unlink/reload, independent profiles, replacement identity, credential rejection, corrupt metadata preserved, no source file changes")
+    }
+
+    @MainActor private static func checkChangeHistory() async throws {
+        let files = FileManager.default
+        let home = files.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent("ChangeHistoryCheck-\(UUID().uuidString)")
+        let suite = "ChangeHistoryCheck.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { try? files.removeItem(at: home); defaults.removePersistentDomain(forName: suite) }
+        let directory = home.appendingPathComponent(".agents/skills/history-skill")
+        try files.createDirectory(at: directory, withIntermediateDirectories: true)
+        try "---\nname: history-skill\ndescription: History test\n---\nBody\n".write(to: directory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        let store = AppStore(defaults: defaults, home: home)
+        await store.rescan()
+        let group = SkillGroup(name: "Test group", skillIDs: [store.skills[0].id])
+        precondition(store.saveGroup(group))
+        await store.prepareGroupChange(group, enabled: true)
+        precondition(store.preferences.activeGroupIDs == [group.id] && store.journal.completed.count == 1)
+        let before = defaults.data(forKey: "libraryPreferences.v1")!
+        await store.prepareGroupChange(group, enabled: false)
+        let plan = store.mutationPreview!
+        precondition(plan.groupSelection?.before == [group.id] && plan.groupSelection?.after == [])
+        precondition(!store.metadataIsEditable, "Group edits are locked while a plan is open")
+        await store.applyPreview()
+        precondition(store.preferences.activeGroupIDs.isEmpty && !store.skills[0].isEnabled)
+        // Simulate a process ending after the completed journal commit but before preferences were saved.
+        defaults.set(before, forKey: "libraryPreferences.v1")
+        let restarted = AppStore(defaults: defaults, home: home)
+        await restarted.rescan()
+        precondition(!restarted.groupSyncFailed && restarted.preferences.activeGroupIDs.isEmpty)
+        precondition(restarted.preferences.lastAppliedGroupChangeID == plan.id)
+        restarted.page = .changes
+        restarted.selectedMutationID = plan.id
+        precondition(restarted.selectedMutation?.id == plan.id)
+        restarted.search = "history-skill"
+        precondition(restarted.filteredMutations.count == 1, "History searches installation paths")
+        await restarted.prepareUndo(plan)
+        precondition(restarted.mutationPreview?.undoes == plan.id)
+        restarted.cancelPreview()
+        precondition(!restarted.skills[0].isEnabled && restarted.preferences.activeGroupIDs.isEmpty)
+        await restarted.prepareUndo(plan)
+        await restarted.applyPreview()
+        precondition(restarted.skills[0].isEnabled && restarted.preferences.activeGroupIDs == [group.id])
+        precondition(restarted.undoUnavailableReason(for: plan) != nil)
+        precondition(restarted.selectedMutation?.undoes == plan.id)
+        precondition(restarted.journal.completed.count == 3)
+
+        // Persist a pending group transition, then restart and finish it through the recovery path.
+        await restarted.prepareGroupChange(group, enabled: false)
+        let pending = restarted.mutationPreview!
+        var journal = restarted.journal
+        journal.pending = pending
+        let journalPath = home.appendingPathComponent("Library/Application Support/" + (Bundle.main.bundleIdentifier ?? "AgentHarnessManager") + "/Library/library-journal.json")
+        try JSONEncoder().encode(journal).write(to: journalPath)
+        let recovering = AppStore(defaults: defaults, home: home)
+        await recovering.rescan()
+        precondition(!recovering.canChangeFiles && !recovering.metadataIsEditable)
+        precondition(!recovering.canEditRoots && !recovering.addRoot(url: home.appendingPathComponent("new-root"), agent: .custom, name: "Blocked during recovery"))
+        precondition(recovering.preferences.activeGroupIDs == [group.id])
+        recovering.selectedMutationID = pending.id
+        precondition(recovering.selectedMutation?.id == pending.id)
+        await recovering.recoverChanges()
+        precondition(recovering.journal.pending == nil && recovering.preferences.activeGroupIDs.isEmpty)
+        precondition(!recovering.skills[0].isEnabled && recovering.canChangeFiles)
+        precondition(recovering.preferences.lastAppliedGroupChangeID == pending.id)
+        let reloaded = AppStore(defaults: defaults, home: home)
+        await reloaded.rescan()
+        precondition(reloaded.journal.completed.count == 4 && !reloaded.groupSyncFailed)
+        let corrupt = Data("invalid JSON".utf8)
+        defaults.set(corrupt, forKey: "libraryPreferences.v1")
+        let blocked = AppStore(defaults: defaults, home: home)
+        await blocked.rescan()
+        precondition(blocked.groupSyncFailed && !blocked.canChangeFiles)
+        precondition(defaults.data(forKey: "libraryPreferences.v1") == corrupt)
+        print("PASS: change history search/selection, reviewed undo and cancellation, metadata-only records, group reconciliation after completion/restart/recovery, pending edit locks, corrupt group settings preserved")
     }
 
     @MainActor private static func checkLibrary() async throws {

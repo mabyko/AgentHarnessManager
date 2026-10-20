@@ -15,7 +15,7 @@ struct SettingsView: View {
                     Button("경로 추가…") {
                         Task { await store.chooseSkillFolder(agent: agent, name: "\(agent.displayName) · 추가 경로") }
                     }
-                    .disabled(store.isScanning)
+                    .disabled(!store.canEditRoots)
                     .accessibilityLabel("\(agent.displayName) 스킬 폴더 추가")
                 } header: { Text("\(agent.displayName) 스킬 경로") }
             }
@@ -28,14 +28,15 @@ struct SettingsView: View {
                     Button("경로 추가…") {
                         Task { await store.chooseSkillFolder(agent: .custom, name: agentName) }
                     }
-                    .disabled(store.isScanning || agentName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || agentName.trimmingCharacters(in: .whitespacesAndNewlines).count > 80)
+                    .disabled(!store.canEditRoots || agentName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || agentName.trimmingCharacters(in: .whitespacesAndNewlines).count > 80)
                     .accessibilityLabel("다른 에이전트 스킬 폴더 추가")
                 }
             } header: { Text("다른 에이전트") }
             footer: { Text("SKILL.md가 있는 폴더 또는 스킬들을 모아 둔 폴더를 선택하세요.") }
 
             Section {
-                Button("경로 상태 새로고침") { Task { await store.rescan() } }.disabled(store.isScanning)
+                Button("경로 상태 새로고침") { Task { await store.rescan() } }.disabled(store.isScanning || store.isMutating || store.isPreparingChange)
+                if !store.canEditRoots { Text("검토·적용·복구를 마친 뒤 경로를 편집할 수 있습니다.").font(.caption).foregroundStyle(.secondary) }
                 if let message = store.settingsMessage { Text(message).font(.caption).accessibilityLabel(message) }
             } footer: {
                 Text("기본 경로는 고정입니다. 추가 경로는 수정하거나 삭제할 수 있으며 폴더와 파일은 그대로 있습니다. 경로는 다음 실행에도 유지됩니다. 에이전트의 실제 스킬 로딩 여부는 확인하지 않습니다.")
@@ -84,10 +85,10 @@ struct SettingsView: View {
                     Button("수정…") {
                         Task { await store.chooseSkillFolder(agent: root.agent, name: root.label, replacing: root) }
                     }
-                    .disabled(store.isScanning)
+                    .disabled(!store.canEditRoots)
                     .accessibilityLabel("\(root.label), \(root.url.path), 경로 수정")
                     Button("삭제", role: .destructive) { Task { await store.removeRoot(root) } }
-                        .disabled(store.isScanning)
+                        .disabled(!store.canEditRoots)
                         .help("앱에 등록한 경로만 삭제하며 폴더와 파일은 그대로 있습니다.")
                         .accessibilityLabel("\(root.label), \(root.url.path), 경로 삭제")
                 }

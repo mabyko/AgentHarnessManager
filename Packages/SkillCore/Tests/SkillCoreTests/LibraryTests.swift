@@ -176,6 +176,198 @@ final class LibraryTests: XCTestCase {
             allInstallations: library.flatMap(\.installations), managedRoots: roots))
     }
 
+    func testUndoRestoresBinaryResourcesAndRecordsBothOperations() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try fixture.skill("one")
+        let resource = original.appendingPathComponent("resource.bin")
+        let bytes = Data([0, 255, 64, 128])
+        try bytes.write(to: resource)
+        let plan = try fixture.plan(fixture.library())
+        XCTAssertNotNil(plan.installations[0].treeHash)
+        try await fixture.service.apply(plan, roots: [fixture.root])
+        let undo = try await fixture.service.planUndo(id: plan.id, roots: [fixture.root])
+        XCTAssertEqual(undo.undoes, plan.id)
+        XCTAssertEqual(undo.installations[0].source, plan.installations[0].destination)
+        try await fixture.service.apply(undo, roots: [fixture.root])
+        let journal = try await fixture.service.load(roots: [fixture.root])
+        XCTAssertEqual(journal.completed.map(\.id), [undo.id, plan.id])
+        XCTAssertNotNil(journal.completed[0].completedAt)
+        XCTAssertTrue(journal.disabled.isEmpty)
+        XCTAssertEqual(try Data(contentsOf: resource), bytes)
+        XCTAssertNotNil(journal.undoUnavailableReason(for: plan.id))
+        await assertThrows { _ = try await fixture.service.planUndo(id: undo.id, roots: [fixture.root]) }
+        await assertThrows { try await fixture.service.apply(plan, roots: [fixture.root]) }
+    }
+
+    func testUndoEnableUsesRecordedStorageAndRejectsNewReaders() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try fixture.skill("one")
+        try await fixture.service.apply(fixture.plan(fixture.library()), roots: [fixture.root])
+        let disabled = try await fixture.service.load(roots: [fixture.root])
+        let items = fixture.library(disabled: disabled.disabled).flatMap(\.installations)
+        let restore = try LibraryService.plan(title: "Restore", installations: items, enabled: true, allInstallations: items, managedRoots: [fixture.root])
+        try await fixture.service.apply(restore, roots: [fixture.root])
+        let undo = try await fixture.service.planUndo(id: restore.id, roots: [fixture.root])
+        let link = fixture.root.url.appendingPathComponent("reader")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: original)
+        await assertThrows { try await fixture.service.apply(undo, roots: [fixture.root]) }
+        try FileManager.default.removeItem(at: link)
+        try await fixture.service.apply(undo, roots: [fixture.root])
+        let journal = try await fixture.service.load(roots: [fixture.root])
+        XCTAssertEqual(journal.disabled[0].currentPath, disabled.disabled[0].currentPath)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: original.path))
+    }
+
+    func testUndoRejectsResourceEditsAfterCompletionAndAfterPreview() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try fixture.skill("one")
+        try "before".write(to: original.appendingPathComponent("resource"), atomically: true, encoding: .utf8)
+        let plan = try fixture.plan(fixture.library())
+        try await fixture.service.apply(plan, roots: [fixture.root])
+        let undo = try await fixture.service.planUndo(id: plan.id, roots: [fixture.root])
+        let resource = URL(fileURLWithPath: plan.installations[0].destination).appendingPathComponent("resource")
+        try "edited".write(to: resource, atomically: true, encoding: .utf8)
+        await assertThrows { _ = try await fixture.service.planUndo(id: plan.id, roots: [fixture.root]) }
+        await assertThrows { try await fixture.service.apply(undo, roots: [fixture.root]) }
+        XCTAssertEqual(try String(contentsOf: resource, encoding: .utf8), "edited")
+        let journal = try await fixture.service.load(roots: [fixture.root])
+        XCTAssertNil(journal.pending)
+        XCTAssertEqual(journal.completed.count, 1)
+    }
+
+    func testUndoAllowsUnrelatedLaterChangesButBlocksOverlappingHistory() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        _ = try fixture.skill("one"); _ = try fixture.skill("two")
+        let skills = fixture.library()
+        let one = try fixture.plan(skills.filter { $0.installations[0].originalPath.hasSuffix("/one") })
+        let two = try fixture.plan(skills.filter { $0.installations[0].originalPath.hasSuffix("/two") })
+        try await fixture.service.apply(one, roots: [fixture.root])
+        let preview = try await fixture.service.planUndo(id: one.id, roots: [fixture.root])
+        try await fixture.service.apply(two, roots: [fixture.root])
+        try await fixture.service.apply(preview, roots: [fixture.root])
+        let later = try fixture.plan(fixture.library())
+        try await fixture.service.apply(later, roots: [fixture.root])
+        await assertThrows { _ = try await fixture.service.planUndo(id: one.id, roots: [fixture.root]) }
+        await assertThrows { try await fixture.service.apply(preview, roots: [fixture.root]) }
+    }
+
+    func testUndoCollisionAndPartialUndoRecoveryNeverOverwrite() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        _ = try fixture.skill("one"); _ = try fixture.skill("two")
+        let plan = try fixture.plan(fixture.library())
+        try await fixture.service.apply(plan, roots: [fixture.root])
+        let undo = try await fixture.service.planUndo(id: plan.id, roots: [fixture.root])
+        let conflict = URL(fileURLWithPath: undo.installations[0].destination)
+        try FileManager.default.createDirectory(at: conflict, withIntermediateDirectories: false)
+        try "keep".write(to: conflict.appendingPathComponent("sentinel"), atomically: true, encoding: .utf8)
+        await assertThrows { try await fixture.service.apply(undo, roots: [fixture.root]) }
+        XCTAssertEqual(try String(contentsOf: conflict.appendingPathComponent("sentinel"), encoding: .utf8), "keep")
+        try FileManager.default.removeItem(at: conflict)
+        var journal = try await fixture.service.load(roots: [fixture.root])
+        journal.pending = undo
+        try JSONEncoder().encode(journal).write(to: fixture.state.appendingPathComponent("library-journal.json"))
+        let first = undo.installations[0]
+        try FileManager.default.moveItem(atPath: first.source, toPath: first.destination)
+        let reloaded = LibraryService(stateDirectory: fixture.state)
+        try await reloaded.recover(roots: [fixture.root])
+        let result = try await reloaded.load(roots: [fixture.root])
+        XCTAssertNil(result.pending)
+        XCTAssertTrue(result.disabled.isEmpty)
+        XCTAssertEqual(result.completed.first?.undoes, plan.id)
+        XCTAssertEqual(fixture.library().count, 2)
+    }
+
+    func testGroupSelectionIsJournaledForRecoveryAndMetadataOnlyUndo() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let id = UUID()
+        let selection = GroupSelectionChange(before: [], after: [id], previousChangeID: nil)
+        let plan = MutationPlan(title: "Select group", installations: [], groupSelection: selection)
+        try await fixture.service.apply(plan, roots: [fixture.root])
+        let stale = MutationPlan(title: "Stale group", installations: [], groupSelection: selection)
+        await assertThrows { try await fixture.service.apply(stale, roots: [fixture.root]) }
+        let saved = try await fixture.service.load(roots: [fixture.root])
+        XCTAssertEqual(saved.groupSelection?.id, plan.id)
+        XCTAssertEqual(saved.groupSelection?.change.after, [id])
+        let undo = try await fixture.service.planUndo(id: plan.id, roots: [fixture.root])
+        try await fixture.service.apply(undo, roots: [fixture.root])
+        let restored = try await fixture.service.load(roots: [fixture.root])
+        XCTAssertEqual(restored.groupSelection?.change.after, [])
+        XCTAssertEqual(restored.completed.count, 2)
+    }
+
+    func testLegacyJournalRemainsReadableButCannotUndoWithoutTreeHash() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        _ = try fixture.skill("one")
+        let plan = try fixture.plan(fixture.library())
+        try await fixture.service.apply(plan, roots: [fixture.root])
+        let path = fixture.state.appendingPathComponent("library-journal.json")
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: path)) as? [String: Any])
+        var records = try XCTUnwrap(json["completed"] as? [[String: Any]])
+        for field in ["createdAt", "completedAt", "undoes", "groupSelection"] { records[0].removeValue(forKey: field) }
+        var moves = try XCTUnwrap(records[0]["installations"] as? [[String: Any]])
+        moves[0].removeValue(forKey: "treeHash"); records[0]["installations"] = moves
+        json["completed"] = records; json.removeValue(forKey: "groupSelection")
+        try JSONSerialization.data(withJSONObject: json).write(to: path)
+        let legacy = try await fixture.service.load(roots: [fixture.root])
+        XCTAssertEqual(legacy.completed[0].id, plan.id)
+        XCTAssertNil(legacy.completed[0].createdAt)
+        XCTAssertNotNil(legacy.undoUnavailableReason(for: plan.id))
+        await assertThrows { _ = try await fixture.service.planUndo(id: plan.id, roots: [fixture.root]) }
+    }
+
+    func testTreeFingerprintRejectsRenamesModesSpecialFilesAndOversizedContent() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try fixture.skill("one")
+        let resource = original.appendingPathComponent("resource")
+        try Data([1]).write(to: resource)
+        let plan = try fixture.plan(fixture.library())
+        let renamed = original.appendingPathComponent("renamed")
+        try FileManager.default.moveItem(at: resource, to: renamed)
+        await assertThrows { try await fixture.service.apply(plan, roots: [fixture.root]) }
+        try FileManager.default.moveItem(at: renamed, to: resource)
+        var info = stat()
+        XCTAssertEqual(lstat(resource.path, &info), 0)
+        XCTAssertEqual(chmod(resource.path, info.st_mode ^ mode_t(0o100)), 0)
+        await assertThrows { try await fixture.service.apply(plan, roots: [fixture.root]) }
+        XCTAssertEqual(chmod(resource.path, info.st_mode), 0)
+        let pipe = original.appendingPathComponent("pipe")
+        XCTAssertEqual(mkfifo(pipe.path, 0o600), 0)
+        XCTAssertThrowsError(try fixture.plan(fixture.library()))
+        try FileManager.default.removeItem(at: pipe)
+        let file = try FileHandle(forWritingTo: resource)
+        try file.truncate(atOffset: 64 * 1_024 * 1_024 + 1)
+        try file.close()
+        XCTAssertThrowsError(try fixture.plan(fixture.library()))
+    }
+
+    func testTreeFingerprintTracksLinkTextWithoutReadingLinkTargets() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try fixture.skill("one")
+        let external = fixture.base.appendingPathComponent("external")
+        try Data([42]).write(to: external)
+        let link = original.appendingPathComponent("linked-resource")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: external)
+        let plan = try fixture.plan(fixture.library())
+        // External targets are not part of the moved tree and are never opened by its fingerprint.
+        try Data([43]).write(to: external)
+        try await fixture.service.apply(plan, roots: [fixture.root])
+        let stored = URL(fileURLWithPath: plan.installations[0].destination)
+        let movedLink = stored.appendingPathComponent("linked-resource")
+        try FileManager.default.removeItem(at: movedLink)
+        try FileManager.default.createSymbolicLink(atPath: movedLink.path, withDestinationPath: "different-target")
+        await assertThrows { _ = try await fixture.service.planUndo(id: plan.id, roots: [fixture.root]) }
+        XCTAssertEqual(try Data(contentsOf: external), Data([43]))
+    }
+
     private func assertThrows(_ body: () async throws -> Void, file: StaticString = #filePath, line: UInt = #line) async {
         do { try await body(); XCTFail("Expected failure", file: file, line: line) } catch {}
     }
