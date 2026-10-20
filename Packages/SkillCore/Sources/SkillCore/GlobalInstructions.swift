@@ -176,7 +176,7 @@ public struct GlobalInstructionService: Sendable {
                 (.antigravity, home.appendingPathComponent(".gemini/GEMINI.md"), "전역 지침"),
                 (.antigravity, home.appendingPathComponent(".gemini/AGENTS.md"), "전역 지침"),
                 (.opencode, config.appendingPathComponent("opencode/AGENTS.md"), "기본 지침"),
-                (.opencode, claude.appendingPathComponent("CLAUDE.md"), "Claude 호환 지침"),
+                (.opencode, home.appendingPathComponent(".claude/CLAUDE.md"), "Claude 호환 지침"),
                 (.pi, pi.appendingPathComponent("AGENTS.override.md"), "우선 지침"),
                 (.pi, pi.appendingPathComponent("AGENTS.md"), "기본 지침"),
                 (.pi, pi.appendingPathComponent("CLAUDE.md"), "호환 지침")]

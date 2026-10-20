@@ -17,6 +17,30 @@ final class GlobalInstructionTests: XCTestCase {
         XCTAssertTrue(try alternate.scan().contains { $0.url == f.home.appendingPathComponent("config/opencode/AGENTS.md") })
     }
 
+    func testOpenCodeFallbackIgnoresClaudeConfigDirectoryAndTracksActualReaders() throws {
+        let f = try InstructionFixture(); defer { f.remove() }
+        let fallback = f.home.appendingPathComponent(".claude/CLAUDE.md")
+        let configured = f.home.appendingPathComponent("claude-profile/CLAUDE.md")
+        try f.write(Data("OpenCode fallback".utf8), to: fallback)
+        try f.write(Data("Claude profile".utf8), to: configured)
+        let service = GlobalInstructionService(home: f.home, environment: ["CLAUDE_CONFIG_DIR": "~/claude-profile"], backupDirectory: f.backups)
+        let documents = try service.scan()
+        let claude = try XCTUnwrap(documents.first { $0.agent == .claudeCode })
+        let opencode = try XCTUnwrap(documents.first { $0.agent == .opencode && $0.url.lastPathComponent == "CLAUDE.md" })
+        XCTAssertEqual(claude.url, configured)
+        XCTAssertEqual(opencode.url, fallback)
+        let claudePlan = try service.prepare(claude, text: "Claude updated")
+        XCTAssertEqual(claudePlan.affectedAgents, [.claudeCode])
+        try service.apply(claudePlan)
+        XCTAssertEqual(try Data(contentsOf: fallback), Data("OpenCode fallback".utf8))
+        let currentFallback = try XCTUnwrap(service.scan().first { $0.id == opencode.id })
+        let fallbackPlan = try service.prepare(currentFallback, text: "OpenCode updated")
+        XCTAssertEqual(fallbackPlan.affectedAgents, [.opencode])
+        try service.apply(fallbackPlan)
+        XCTAssertEqual(try Data(contentsOf: configured), Data("Claude updated".utf8))
+        XCTAssertEqual(try Data(contentsOf: fallback), Data("OpenCode updated".utf8))
+    }
+
     func testPreviewThenCreateAndRestoreCreationWithoutOverwriting() throws {
         let f = try InstructionFixture(); defer { f.remove() }
         let document = try f.document(.codex)

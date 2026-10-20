@@ -12,7 +12,7 @@ These are candidate files, not proof that a running agent loaded them. Agent ver
 | Claude Code | `~/.claude/CLAUDE.md` | User-global memory; project, managed memory and modular rules are separate. Honors `CLAUDE_CONFIG_DIR`. |
 | Grok Build | `~/.grok/AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `AGENT.md` in that directory | Multiple compatible files may be loaded. |
 | Antigravity | `~/.gemini/GEMINI.md`, `~/.gemini/AGENTS.md` | User-global instructions; separate rule directories are outside this editor. |
-| OpenCode | `~/.config/opencode/AGENTS.md`, Claude's user-global `CLAUDE.md` | Own file takes precedence; Claude fallback depends on compatibility settings. Honors `XDG_CONFIG_HOME` for its own file. |
+| OpenCode | `~/.config/opencode/AGENTS.md`, `~/.claude/CLAUDE.md` | Own file takes precedence; Claude fallback depends on compatibility settings. Honors `XDG_CONFIG_HOME` for its own file; the fallback ignores `CLAUDE_CONFIG_DIR`. |
 | Pi | `~/.pi/agent/AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md` in that directory | First existing candidate takes priority, including an empty file. Honors `PI_CODING_AGENT_DIR`. |
 | Cursor | Not provided by this editor | User Rules are managed in Cursor Settings. Its skills and MCP connection remain supported. |
 | Devin CLI | Not provided by this editor | A supported user-global file location has not been established here. Its skills and MCP connection remain supported. |
