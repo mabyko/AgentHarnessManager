@@ -1,11 +1,12 @@
 // Preserve the legacy bundle ID so existing settings and work profiles remain available.
+// Keep AGENT_SKILL_MANAGER_BUNDLE_ID compatible with existing Local.xcconfig overrides.
 // Fresh checkouts use a local development identity, with no Apple team selected.
 AGENT_SKILL_MANAGER_BUNDLE_ID = forked.agentskillmanager.local
 AGENT_SKILL_MANAGER_BUNDLE_ID[config=Debug] = forked.agentskillmanager.local.dev
-APP_DISPLAY_NAME = Agent Plugin Manager
-APP_DISPLAY_NAME[config=Debug] = Agent Plugin Manager Dev
-APP_PRODUCT_NAME = Agent Plugin Manager
-APP_PRODUCT_NAME[config=Debug] = Agent Plugin Manager Dev
+APP_DISPLAY_NAME = Agent Harness Manager
+APP_DISPLAY_NAME[config=Debug] = Agent Harness Manager Dev
+APP_PRODUCT_NAME = Agent Harness Manager
+APP_PRODUCT_NAME[config=Debug] = Agent Harness Manager Dev
 INFOPLIST_KEY_CFBundleDisplayName = $(APP_DISPLAY_NAME)
 INFOPLIST_KEY_CFBundleName = $(APP_DISPLAY_NAME)
 

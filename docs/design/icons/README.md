@@ -5,8 +5,8 @@
 - [Release 원본](release-b-master.png)
 - [Debug 원본](dev-b-master.png): 동일 디자인에 주황색 D 표시
 - [16·32·64px 비교](size-preview.png)
-- [Release AppIcon](../../../AgentPluginManager/Assets.xcassets/AppIcon.appiconset)
-- [Debug AppIcon-Dev](../../../AgentPluginManager/Assets.xcassets/AppIcon-Dev.appiconset)
+- [Release AppIcon](../../../AgentHarnessManager/Assets.xcassets/AppIcon.appiconset)
+- [Debug AppIcon-Dev](../../../AgentHarnessManager/Assets.xcassets/AppIcon-Dev.appiconset)
 
 내장 image_gen으로 승인한 B의 외부 배경을 투명하게 정리하고 Debug 파생 이미지를 만들었다. 두 Bundle ID가 달라 아이콘을 구분한다. 자산 카탈로그의 기존 슬롯을 읽어 sips로 크기를 변환했다. project.yml의 기본 AppIcon·Debug AppIcon-Dev 연결은 유지한다. [이전 아이콘 이력과 프롬프트](organizer-history.md), [시안 비교](service-candidates/README.md)는 보존한다. 작은 크기와 두 구성의 자산 컴파일·서명을 검수한다.
 

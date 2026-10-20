@@ -25,10 +25,12 @@ jobs:
         run: swift test --package-path Packages/SkillCore
       - name: App-state checks
         run: scripts/check-app-state.sh
+      - name: Management CLI and MCP checks
+        run: scripts/check-management.sh
       - name: Design and documentation checks
         run: node scripts/check-design.mjs
       - name: Release build
         run: >-
-          xcodebuild -project AgentPluginManager.xcodeproj
-          -scheme AgentPluginManager -configuration Release
+          xcodebuild -project AgentHarnessManager.xcodeproj
+          -scheme AgentHarnessManager -configuration Release
           -derivedDataPath build CODE_SIGNING_ALLOWED=NO build

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve Agent Plugin Manager. Bug reports, feature proposals, code, and documentation changes are welcome in English or Korean.
+Thanks for helping improve Agent Harness Manager. Bug reports, feature proposals, code, and documentation changes are welcome in English or Korean.
 
 ## Before making a change
 
@@ -10,13 +10,13 @@ For bugs, include your macOS and Xcode versions, build configuration, reproducti
 
 ## Development setup
 
-Use macOS 26+ and Xcode 26+ with Swift 6.2+. Open `AgentPluginManager.xcodeproj` and select the `AgentPluginManager` scheme. Debug builds have a separate app name, icon, and preferences domain from Release.
+Use macOS 26+ and Xcode 26+ with Swift 6.2+. Open `AgentHarnessManager.xcodeproj` and select the `AgentHarnessManager` scheme. Debug builds have a separate app name, icon, and preferences domain from Release.
 
 No Apple team is required for the default ad-hoc signing setup. To customize your local identity, create `Config/Local.xcconfig`, which is ignored by Git:
 
 ```xcconfig
-AGENT_SKILL_MANAGER_BUNDLE_ID = org.example.agentpluginmanager
-AGENT_SKILL_MANAGER_BUNDLE_ID[config=Debug] = org.example.agentpluginmanager.dev
+AGENT_SKILL_MANAGER_BUNDLE_ID = org.example.agentharnessmanager
+AGENT_SKILL_MANAGER_BUNDLE_ID[config=Debug] = org.example.agentharnessmanager.dev
 // DEVELOPMENT_TEAM = <your-Apple-team-id>
 ```
 
@@ -35,24 +35,27 @@ Run these from the repository root:
 ```sh
 swift test --package-path Packages/SkillCore
 scripts/check-app-state.sh
+scripts/check-management.sh
 node scripts/check-design.mjs
-xcodebuild -project AgentPluginManager.xcodeproj \
-  -scheme AgentPluginManager -configuration Release \
+xcodebuild -project AgentHarnessManager.xcodeproj \
+  -scheme AgentHarnessManager -configuration Release \
   -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
 ```
 
-Node.js 22+ is needed for the design check; no npm dependencies are required. Core tests use temporary folders, and the app-state check uses a temporary home and isolated preferences. They do not modify your installed skills or saved app settings.
+Node.js 22+ is needed for the design check and Python 3 for CLI/MCP checks; no npm dependencies are required. Core tests use temporary folders, and the app-state check uses a temporary home and isolated preferences. They do not modify your installed skills or saved app settings.
 
 The GitHub Actions workflow is configured to run these checks on pull requests and pushes to `main`. It uses the [macOS 26 runner image](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md) and a pinned [checkout action](https://github.com/actions/checkout).
 
-For UI changes, also inspect the native app in light and dark mode and verify keyboard access to the affected controls. Prototype checks do not validate native UI behavior or filesystem writes.
+For UI changes, also inspect the native app in light and dark mode and verify keyboard access to the affected controls. Run `scripts/check-settings.sh` from a logged-in macOS desktop to check actual settings-category clicks, General, all eight connection rows, and the native skill-path agent picker. It uses synthetic paths and refreshes the native settings screenshots; it is separate from headless CI. Prototype checks do not validate native UI behavior or filesystem writes.
+
+Run `scripts/check-settings.sh --accessibility` for native accessibility-tree names, values and actions, sidebar Tab/Shift-Tab/Space, accessible picker selection, and group-sheet focus/Escape checks. The optional runner requires existing macOS Accessibility access and exits without requesting it when unavailable. It launches only its own isolated fixture; it never changes system keyboard navigation or VoiceOver settings. Spoken VoiceOver output and global all-controls Tab traversal still need manual verification. Failed expectations exit with a log message instead of generating crash dialogs.
 
 ## Pull requests
 
 - Keep changes focused and explain the user-visible result and relevant checks.
 - Reuse existing types and platform controls; add dependencies only for a demonstrated need.
 - Preserve separate identities for copies and links. Catalog discovery must not imply that an agent loaded a skill.
-- Keep user skill files unchanged in the current implementation. File-changing features need explicit previews, conflict handling, recovery, and tests before they can reach user files.
+- Keep discovery, reading, metadata editing, and group selection free of file changes. File switches require explicit previews, conflict handling, durable recovery, and tests. Exercise writes only with synthetic temporary skills during development checks.
 - Update both [README.md](README.md) and [README.ko.md](README.ko.md) when behavior or setup changes. Detailed design notes may remain in Korean; new contributor-facing documentation should be in English.
 - Use synthetic examples and original assets in new documentation. Link to third-party reference material instead of copying it into the repository.
 

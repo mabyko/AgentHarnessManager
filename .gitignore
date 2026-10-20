@@ -9,3 +9,15 @@ Config/Identities/
 /build/
 *.xcarchive
 *.dSYM/
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision
+*.app/
+*.dmg
+*.log

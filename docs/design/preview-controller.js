@@ -3,7 +3,7 @@ const tokens = JSON.parse(document.getElementById('design-tokens').textContent);
 let entries = structuredClone(demoEntries), policy = structuredClone(demoPolicy), lastKnown = new Map(entries.map(entry=>[entry.id,structuredClone(entry)])), revision = 0, route = 'library', filter = 'all', selected = entries[0].id, selectedProfile = 'app', selectedGroup = '앱 개발', planState = null, history = [];
 const $ = id => document.getElementById(id);
 const escapeHTML = value => String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
-const demoVaultPath = entry => '~/Library/Application Support/AgentPluginManager/Disabled/'+entry.rootId+'/'+entry.id+'/payload/'+entry.path.split('/').at(-1);
+const demoVaultPath = entry => '~/Library/Application Support/AgentHarnessManager/Disabled/'+entry.rootId+'/'+entry.id+'/payload/'+entry.path.split('/').at(-1);
 const icon = name => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${document.getElementById('i-'+name).innerHTML}</svg>`;
 const stateLabel = state => ({on:'발견 위치에 있음',off:'보관됨',unknown:'파일 상태 미확인'}[state]??'파일 상태 미확인');
 function setTheme(dark) {
