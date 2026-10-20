@@ -18,12 +18,13 @@ Most detailed notes are currently in Korean. They include proposed behavior beyo
 | [Design review](design-review.md) | Historical prototype findings and proposed safety requirements |
 | [Selected design](design/final-candidate.md) | Adopted visual direction and historical native validation notes |
 | [Icon notes](design/icons/README.md) | App icon sources, development variant, and generation prompts |
+| [Agent logo usage review](agent-logo-usage-review.md) | Official identity-asset terms, identification use, and unresolved public-distribution questions |
 
 ## Prototypes
 
 [Selected prototype](design/final-preview.html) and [initial prototype](design/preview.html) are review materials. Open the HTML files locally. They use example data and may simulate features that are not implemented in the native app. The prototype checks run with `node scripts/check-design.mjs`.
 
-The source-navigation A/B/C comparison was archived on branch `docs/source-navigation-prototype` at commit `c1e5f4e`; A was selected and implemented in the native app. The archive uses synthetic examples and is separate from production changes.
+The source-navigation A/B/C comparison was a design exploration; A was selected and implemented in the native app. Historical prototypes use synthetic examples and do not define current production support.
 
 Older screenshots are historical records, not current product screenshots. See [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 
@@ -35,4 +36,4 @@ Older screenshots are historical records, not current product screenshots. See [
 - Confirm GitHub Actions passes after upload. Local checks alone do not verify the hosted workflow.
 - Publish binary releases only after verifying signing, notarization, and clean-machine installation. Until then, document source builds without claiming a notarized installer is available.
 
-The GitHub repository URL and any downloadable release links should be added once those resources exist.
+Source repository: [mabyko/AgentHarnessManager](https://github.com/mabyko/AgentHarnessManager). Downloadable binary releases will be linked after distribution validation.
