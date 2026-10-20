@@ -4,7 +4,7 @@ import Foundation
 import SkillCore
 
 enum AppPage: String, CaseIterable, Identifiable {
-    case library, findings, groups, history, changes, requests, profiles
+    case library, findings, groups, history, changes, requests, profiles, instructions
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -15,6 +15,7 @@ enum AppPage: String, CaseIterable, Identifiable {
         case .history: "검사 이력"
         case .changes: "변경 이력"
         case .requests: "에이전트 요청"
+        case .instructions: "전역 지침"
         }
     }
     var symbol: String {
@@ -26,6 +27,7 @@ enum AppPage: String, CaseIterable, Identifiable {
         case .history: "clock.arrow.circlepath"
         case .changes: "arrow.left.arrow.right"
         case .requests: "tray.and.arrow.down"
+        case .instructions: "text.document"
         }
     }
 }
@@ -52,6 +54,7 @@ struct SourceGroup: Identifiable {
 
 @MainActor @Observable
 final class AppStore {
+    let instructions: InstructionStore
     var page: AppPage = .library {
         didSet {
             if page != oldValue { sourceFilterID = nil; rootFilterID = nil; resetFilters(); selectedEntry = nil; selectedSkillID = nil; selectedFindingID = nil }
@@ -133,9 +136,13 @@ final class AppStore {
     private static let profilesKey = "workProfiles"
 
     init(defaults: UserDefaults = .standard, home: URL = FileManager.default.homeDirectoryForCurrentUser,
-         installationDetector: AgentInstallationDetector? = nil) {
+         installationDetector: AgentInstallationDetector? = nil,
+         instructionEnvironment: [String: String] = ProcessInfo.processInfo.environment) {
         self.defaults = defaults
         self.home = home
+        instructions = InstructionStore(service: GlobalInstructionService(home: home, environment: instructionEnvironment,
+            backupDirectory: home.resolvingSymlinksInPath().appendingPathComponent("Library/Application Support/"
+                + (Bundle.main.bundleIdentifier ?? "AgentHarnessManager") + "/InstructionBackups")))
         self.installationDetector = installationDetector ?? AgentInstallationDetector(home: home)
         libraryService = LibraryService(stateDirectory: home.resolvingSymlinksInPath()
             .appendingPathComponent("Library/Application Support/" + (Bundle.main.bundleIdentifier ?? "AgentHarnessManager") + "/Library"))

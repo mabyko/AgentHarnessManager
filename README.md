@@ -4,7 +4,7 @@
 
 A native macOS library for agent skills, built with SwiftUI. Browse skills and their installation locations, organize groups, and review file changes before applying them. Starts with Codex, Claude Code, Grok Build, Antigravity, OpenCode, Pi, Devin CLI, and Cursor.
 
-**Early development:** the interface uses a sidebar, list, and persistent detail column. Visual styling remains our own. AI review, automatic grouping, plugin installation, and MCP/hook/instruction management are not implemented. The app interface is currently in Korean.
+**Early development:** the interface uses a sidebar, list, and persistent detail column. Visual styling remains our own. AI review, automatic grouping, plugin installation, general MCP/hook management, and project instruction editing are not implemented. The app interface is currently in Korean.
 
 ## What works today
 
@@ -21,6 +21,7 @@ A native macOS library for agent skills, built with SwiftUI. Browse skills and t
 - Show detected installed agents in the sidebar; keep all eight integrations and their installation state in Settings. Detection checks executable files and supported app bundles without launching agents or reading credentials. Explicitly registered custom agents remain visible, and missing agents do not remove skill data.
 - Connect Codex, Claude Code, Grok Build, Antigravity, OpenCode, Pi, Devin CLI, and Cursor through the bundled CLI/stdio MCP server. Agents can inspect skills and local findings, preview enable/disable changes, and queue requests for human review in the app. Connection installation/removal previews the command or MCP entry and backs up existing configuration. Shared compatibility paths remain one installation and show affected agents.
 - Navigate custom sidebar controls with the keyboard. Accessibility labels identify each agent action and path; agent names and connection states are read together.
+- View, edit, and create user-global instruction files for Codex, Claude Code, Grok Build, Antigravity, OpenCode, and Pi. Review before/after text before saving or restoring a private local backup. External edits block stale writes; supported shared file links retain their links. Cursor and Devin CLI are marked unsupported for this file editor only.
 
 Group and whole-skill switches act on installation links when a skill has a shared source. The source stays enabled and counts toward the library’s observed file state, even when all its installation links are off. Individual agent links can be switched separately.
 
@@ -63,6 +64,7 @@ Personal signing settings belong in the ignored `Config/Local.xcconfig`. See [CO
 4. Request a supported file switch, review every source and destination, then choose Apply. If interrupted, resolve any reported conflict and use “복구 재시도” to finish the recorded operation.
 5. Open “변경 이력” to inspect recorded moves or choose “되돌리기 검토…” and review the inverse plan before applying it.
 6. Refresh and choose “검사” to save a local review snapshot; open its history entry to inspect the saved evidence.
+7. Open **전역 지침**, choose an agent and file, edit the Markdown, then choose **변경 검토…** (`⌘S`) and explicitly save. **백업 복원** also requires a preview. Drafts survive navigation and refresh in the running app; quitting warns before discarding them. See [global instruction files](docs/global-instructions.md) for paths, precedence, backups, and supported links.
 
 ## Agent CLI / MCP connection
 
@@ -79,6 +81,8 @@ Detection checks absolute `PATH` entries, common user CLI folders and Homebrew/s
 ## Local data and file access
 
 The app stores groups, favorites, local review history, legacy work configurations, manual source associations, additional paths, and appearance preferences locally in `UserDefaults`. Group migration leaves the original work-configuration bytes intact. Corrupt group/review/provenance data is preserved and its writes are blocked. Local skill management requires no account or network access and does not execute skill scripts. The app does not store model-provider credentials or access the Keychain. There is no telemetry.
+
+Reviewed global instruction writes keep the prior file bytes in `~/Library/Application Support/<bundle-id>/InstructionBackups/`, separate from the skill journal. These private backups contain instruction text and should be included in your own local backups. Discovery and preview do not create instruction files. The CLI/MCP interface does not expose the instruction editor or its backups.
 
 File changes use `~/Library/Application Support/<bundle-id>/Library/library-journal.json`, protected by an exclusive lock and atomic, synced journal writes. Disabled folders or installation links are moved to unique `.ahm-disabled-<UUID>` siblings of the discovery root (for example, under `~/.agents`, outside `~/.agents/skills`) on the same volume, and are read through their journal records. The original installation identity survives disable/restore. Keep the journal and these folders when backing up or removing the app while skills are disabled. Interrupted operations resume the recorded plan. The latest 100 completed operations are retained. Undo records a new inverse operation and rejects newer changes to the same installation, edited content, path collisions, and newly discovered shared readers. Older records without a directory fingerprint remain readable but cannot be undone. Undoing an undo and force recovery are not supported.
 
@@ -98,7 +102,7 @@ Legacy bundle IDs (`forked.agentskillmanager.local` and `.dev`) are retained to 
 
 - Extend verified discovery rules, provenance formats, and plugin membership.
 - Extend file-switch support beyond default-root directories and single-hop installation links; add broader recovery tools, AI review, and automatic grouping.
-- Add plugin installation and updates through verified agent-supported workflows, then support MCP servers, hooks, and instructions where applicable.
+- Add plugin installation and updates through verified agent-supported workflows, then extend MCP server, hook, and project instruction support where applicable.
 - Complete accessibility and distribution validation.
 
 A plugin is a distribution package; a repository is a source; a work configuration is the user's selection. Standalone skills remain standalone. Design prototypes may show future features; they are not a statement of current app support.

@@ -10,8 +10,10 @@ struct ContentView: View {
     var body: some View {
         @Bindable var store = store
         NavigationSplitView {
-            LibrarySidebar { groupEditor = SkillGroup() }
-                .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 300)
+            Group {
+                if store.page == .instructions { InstructionSidebar() }
+                else { LibrarySidebar { groupEditor = SkillGroup() } }
+            }.navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 300)
         } content: {
             VStack(spacing: 0) {
                 listHeader
@@ -23,15 +25,17 @@ struct ContentView: View {
                 case .history: historyList
                 case .changes: mutationList
                 case .requests: agentRequestList
+                case .instructions: InstructionFileList()
                 case .profiles:
                     ContentUnavailableView("이전 작업 구성", systemImage: "archivebox", description: Text("기존 데이터와 메모를 오른쪽에서 확인하세요. 그룹으로 가져온 뒤에도 원본은 보존됩니다."))
                 }
                 Divider()
                 HStack {
-                    if store.isScanning || store.isPreparingChange { ProgressView().controlSize(.mini); Text(store.isPreparingChange ? "변경 계획 확인 중" : "확인 중") }
+                    if store.page == .instructions { Text("전역 파일 \(store.instructions.agentDocuments.count)개") }
+                    else if store.isScanning || store.isPreparingChange { ProgressView().controlSize(.mini); Text(store.isPreparingChange ? "변경 계획 확인 중" : "확인 중") }
                     else { Text("스킬 \(store.skills.count) · 설치 \(store.allInstallations.count)") }
                     Spacer()
-                    if let date = store.lastScanned { Text(date, format: .dateTime.hour().minute()) }
+                    if store.page != .instructions, let date = store.lastScanned { Text(date, format: .dateTime.hour().minute()) }
                 }.font(.caption).foregroundStyle(.secondary).padding(12)
             }
             .background(WorkbenchTheme.surface)
@@ -59,6 +63,7 @@ struct ContentView: View {
                     if let request = store.selectedAgentRequest { AgentRequestDetail(request: request) }
                     else { selectionPrompt("에이전트 요청을 선택하세요", symbol: "tray.and.arrow.down", description: "CLI·MCP에서 보낸 요청을 확인하세요. 검토·적용 전에는 스킬 파일을 변경하지 않습니다.") }
                 case .profiles: ProfilesView()
+                case .instructions: InstructionDetail()
                 }
             }
             .frame(minWidth: 360)
@@ -69,24 +74,33 @@ struct ContentView: View {
         .tint(WorkbenchTheme.accent)
         .toolbar {
             ToolbarItem {
-                Button { Task { await store.rescan() } } label: { Label("새로고침", systemImage: "arrow.clockwise") }
-                    .disabled(store.isScanning || store.isMutating || store.isPreparingChange).help("등록 경로 다시 확인 (⌘R)")
+                Button { Task {
+                    if store.page == .instructions { await store.instructions.refresh(); await store.instructions.loadBackups() }
+                    else { await store.rescan() }
+                } } label: { Label("새로고침", systemImage: "arrow.clockwise") }
+                    .disabled(store.isScanning || store.isMutating || store.isPreparingChange || store.instructions.busy).help("현재 목록 다시 확인 (⌘R)")
             }
             ToolbarItem {
-                Button { store.runLocalReview() } label: { Label("검사", systemImage: "checkmark.shield") }
+                if store.page != .instructions { Button { store.runLocalReview() } label: { Label("검사", systemImage: "checkmark.shield") }
                     .disabled(!store.hasScanned || store.isScanning || store.isMutating || store.isPreparingChange || store.reviewsLoadFailed)
+                }
             }
             ToolbarItem { Button { openSettings() } label: { Label("설정", systemImage: "gearshape") } }
         }
-        .searchable(text: $store.search, placement: .toolbar, prompt: store.page == .requests ? "요청 제목 또는 ID 검색" : "이름, 설명 또는 경로 검색")
+        .searchable(text: $store.search, placement: .toolbar, prompt: store.page == .instructions ? "지침 파일 이름 또는 경로 검색" : store.page == .requests ? "요청 제목 또는 ID 검색" : "이름, 설명 또는 경로 검색")
         .onChange(of: [store.search, store.agentFilter?.rawValue ?? "", store.rootFilterID ?? "", store.sourceFilterID ?? "", String(store.linksOnly)]) { _, _ in
             if let id = store.selectedSkillID, !store.filteredSkills.contains(where: { $0.id == id }) { store.selectedSkillID = nil }
         }
         .sheet(item: $groupEditor) { GroupEditor(group: $0) }
         .sheet(item: $store.mutationPreview, onDismiss: { store.cancelPreview() }) { MutationPreview(plan: $0) }
+        .sheet(item: Binding(get: { store.instructions.preview }, set: { store.instructions.preview = $0 })) {
+            InstructionChangeReview(plan: $0, editor: store.instructions)
+        }
         .task { if !store.hasScanned && !store.isScanning { await store.rescan() } }
+        .task(id: store.page) { if store.page == .instructions, !store.instructions.loaded { await store.instructions.refresh() } }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await store.refreshAgentRequests() }
+            if store.page == .instructions { Task { await store.instructions.refresh() } }
         }
     }
 
@@ -110,6 +124,7 @@ struct ContentView: View {
             if store.page == .history { Text("로컬 검사 이력 · 최근 50회 보관").font(.caption).foregroundStyle(.secondary) }
             if store.page == .changes { Text("완료 기록 최근 100회 · 중단된 작업 포함").font(.caption).foregroundStyle(.secondary) }
             if store.page == .requests { Text("에이전트가 제안한 변경 · 앱에서 검토 후 적용").font(.caption).foregroundStyle(.secondary) }
+            if store.page == .instructions { Text(store.instructions.agent.displayName + " · 사용자 전역 지침").font(.caption).foregroundStyle(.secondary) }
         }.padding(16)
     }
     private var listTitle: String {

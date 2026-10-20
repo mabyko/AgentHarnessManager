@@ -150,7 +150,51 @@ struct AppStateCheck {
         try await checkLinkSwitching()
         try await checkAgentRequests()
         try await checkAgentInstallations()
+        try await checkInstructions()
         print("PASS: profile create/edit/search/reload/delete, missing members preserved, invalid/corrupt state blocked, filters, fixed default paths, additional path edit/delete/reload, import profiles, reject missing members, preserve imported snapshots, no skill file changes")
+    }
+
+    @MainActor private static func checkInstructions() async throws {
+        func check(_ condition: Bool, _ message: String) {
+            if !condition { fputs("FAIL: " + message + "\n", stderr); exit(1) }
+        }
+        let files = FileManager.default
+        let home = files.temporaryDirectory.appendingPathComponent("ahm-instructions-state-" + UUID().uuidString)
+        let suite = "ahm-instructions-state." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { try? files.removeItem(at: home); defaults.removePersistentDomain(forName: suite) }
+        let url = home.appendingPathComponent(".codex/AGENTS.md")
+        try files.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "Original\n".write(to: url, atomically: true, encoding: .utf8)
+        let app = AppStore(defaults: defaults, home: home, instructionEnvironment: [:])
+        let store = app.instructions
+        await store.refresh()
+        check(store.text == "Original\n" && !store.hasDrafts, "Initial instruction discovery")
+        store.edit("Draft\n")
+        for agent in [SkillAgent.cursor, .devin] {
+            store.chooseAgent(agent)
+            check(!store.supported && store.selectedDocument == nil, "Unsupported global instruction agents")
+        }
+        store.chooseAgent(.codex)
+        app.page = .instructions
+        app.page = .library
+        check(store.text == "Draft\n" && store.hasDrafts, "Navigation must preserve instruction drafts")
+        try "External\n".write(to: url, atomically: true, encoding: .utf8)
+        await store.refresh()
+        check(store.text == "Draft\n" && store.externallyChanged && !store.canSave, "Refresh preserves drafts and blocks external conflicts")
+        store.discardDraft()
+        check(store.text == "External\n" && !store.hasDrafts, "Discard must expose the current file")
+        store.edit("Saved\n")
+        await store.prepareSave()
+        check(try String(contentsOf: url, encoding: .utf8) == "External\n", "Preview must not write instructions")
+        guard let plan = store.preview else { throw NSError(domain: "Instruction preview", code: 1) }
+        check(await store.apply(plan), "Apply instruction preview")
+        check(store.text == "Saved\n" && !store.hasDrafts && store.backups.count == 1, "Saved instruction state and backup")
+        await store.prepareRestore(store.backups[0])
+        guard let restore = store.preview else { throw NSError(domain: "Instruction restore", code: 1) }
+        check(await store.apply(restore), "Restore instruction backup")
+        check(try String(contentsOf: url, encoding: .utf8) == "External\n", "Restore must recover the prior contents")
+        print("PASS: instruction drafts, unsupported agents, navigation, external conflicts, reviewed writes and backup restore")
     }
 
     @MainActor private static func checkAgentInstallations() async throws {

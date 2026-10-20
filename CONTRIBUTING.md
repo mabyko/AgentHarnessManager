@@ -50,6 +50,8 @@ For UI changes, also inspect the native app in light and dark mode and verify ke
 
 Run `scripts/check-settings.sh --accessibility` for native accessibility-tree names, values and actions, sidebar Tab/Shift-Tab/Space, accessible picker selection, and group-sheet focus/Escape checks. The optional runner requires existing macOS Accessibility access and exits without requesting it when unavailable. It launches only its own isolated fixture; it never changes system keyboard navigation or VoiceOver settings. Spoken VoiceOver output and global all-controls Tab traversal still need manual verification. Failed expectations exit with a log message instead of generating crash dialogs.
 
+Run `scripts/check-settings.sh --instructions` for the native global instruction editor: unsupported-agent states, draft navigation, review cancellation, explicit save, and backup restore. It uses synthetic instruction files and writes light/dark screenshots to `/tmp/ahm-instructions-*.png`. It has the same existing Accessibility-access requirement. App-state and core tests cover draft conflicts, file identity checks, private backups, and supported symlink handling without opening your real instruction files.
+
 ## Pull requests
 
 - Keep changes focused and explain the user-visible result and relevant checks.

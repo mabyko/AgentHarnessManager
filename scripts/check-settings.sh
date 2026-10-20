@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 case "${1:-}" in
     "") settings_check_source=scripts/check-settings.swift ;;
     --accessibility) settings_check_source=scripts/check-accessibility.swift ;;
+    --instructions) settings_check_source=scripts/check-instructions.swift ;;
     *) exit 64 ;;
 esac
 settings_check_dir=$(mktemp -d /tmp/ahm-settings-check.XXXXXX)
@@ -31,6 +32,7 @@ swiftc -swift-version 6 -I "$settings_check_dir" -L "$settings_check_dir" -lSkil
     AgentHarnessManager/ContentView.swift AgentHarnessManager/LibraryDetailViews.swift \
     AgentHarnessManager/GroupEditor.swift AgentHarnessManager/ProfilesView.swift \
     AgentHarnessManager/SourceEditorSheet.swift AgentHarnessManager/AgentRequestDetail.swift \
+    AgentHarnessManager/InstructionStore.swift AgentHarnessManager/InstructionViews.swift \
     "$settings_check_source" -o "$settings_check_app/MacOS/check"
 python3 - "$settings_check_app/MacOS/check" <<'PY'
 import subprocess

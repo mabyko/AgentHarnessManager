@@ -11,6 +11,7 @@ Most detailed notes are currently in Korean. They include proposed behavior beyo
 | Document | Purpose |
 | --- | --- |
 | [Agent CLI / MCP](agent-integration.md) | Management commands, agent connection setup, reviewed requests, backups, and limits |
+| [Global instruction files](global-instructions.md) | Supported user-global paths, reviewed editing, draft conflicts, private backups, and shared file links |
 | [Architecture](architecture.md) | Current library, group, local review, limited file-change/recovery support, and broader proposed contracts |
 | [Product scenarios](product-scenarios.md) | User flows, scope, failure handling, and acceptance criteria |
 | [Glossary](../GLOSSARY.md) | Plugins, skills, sources, work configurations, and planned file states |

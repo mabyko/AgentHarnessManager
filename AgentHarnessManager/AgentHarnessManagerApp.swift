@@ -2,12 +2,14 @@ import SwiftUI
 
 @main
 struct AgentHarnessManagerApp: App {
+    @NSApplicationDelegateAdaptor(InstructionAppDelegate.self) private var appDelegate
     @State private var store = AppStore()
     @AppStorage("appearance") private var appearance = "system"
 
     var body: some Scene {
         Window("Agent Harness Manager", id: "workbench") {
             ContentView()
+                .onAppear { appDelegate.instructions = store.instructions }
                 .environment(store)
                 .preferredColorScheme(colorScheme)
                 .frame(minWidth: 960, minHeight: 640)
@@ -18,10 +20,16 @@ struct AgentHarnessManagerApp: App {
         .commands {
             CommandGroup(after: .newItem) {
                 Button("새로고침") {
-                    Task { await store.rescan() }
+                    Task {
+                        if store.page == .instructions { await store.instructions.refresh(); await store.instructions.loadBackups() }
+                        else { await store.rescan() }
+                    }
                 }
                 .keyboardShortcut("r", modifiers: .command)
-                .disabled(store.isScanning)
+                .disabled(store.isScanning || store.instructions.busy)
+                Button("지침 변경 검토…") { Task { await store.instructions.prepareSave() } }
+                    .keyboardShortcut("s", modifiers: .command)
+                    .disabled(store.page != .instructions || !store.instructions.canSave)
             }
         }
 

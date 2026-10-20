@@ -43,6 +43,11 @@ struct LibrarySidebar: View {
                         }
                     }
                     VStack(alignment: .leading, spacing: 4) {
+                        sectionTitle("지침")
+                        row("전역 지침", symbol: "text.document", count: GlobalInstructionService.supportedAgents.count,
+                            selected: store.page == .instructions) { store.page = .instructions }
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
                         sectionTitle("그룹")
                         row("모든 그룹", symbol: "folder", count: store.groups.count, selected: store.page == .groups) { store.page = .groups }
                         ForEach(store.groups) { group in
