@@ -12,7 +12,7 @@ The `Agent-*.imageset` assets identify supported agents in the sidebar and setti
 
 These third-party marks remain the property of their respective owners and are **not relicensed under this project's MIT license**. Use them only to identify the corresponding integrations, in accordance with the linked vendor guidance. Do not use them as Agent Harness Manager's app icon or imply endorsement.
 
-This notice records provenance and attribution; it is not a vendor approval record. An open-source release does not waive vendor trademark conditions. The [agent logo usage review](docs/agent-logo-usage-review.md) records conditional permissions and unresolved approval or redistribution scope. Anthropic’s published policy requires prior-approved materials; Google’s compatibility guidance links to a general icon approval process. Neither approval is recorded for this app.
+The project retains the supplied icons for contextual agent identification alongside accurate product names. This notice records provenance and attribution; it is not a vendor approval record. An open-source release does not waive vendor trademark conditions. The [agent logo usage review](docs/agent-logo-usage-review.md) records this decision, conditional permissions, and unresolved approval or redistribution scope. Anthropic’s published policy requires prior-approved materials; Google’s compatibility guidance links to a general icon approval process. Neither approval is recorded for this app.
 
 Google Antigravity is a trademark of Google LLC. Other product names and marks belong to their respective owners.
 

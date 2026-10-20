@@ -18,7 +18,7 @@ Most detailed notes are currently in Korean. They include proposed behavior beyo
 | [Design review](design-review.md) | Historical prototype findings and proposed safety requirements |
 | [Selected design](design/final-candidate.md) | Adopted visual direction and historical native validation notes |
 | [Icon notes](design/icons/README.md) | App icon sources, development variant, and generation prompts |
-| [Agent logo usage review](agent-logo-usage-review.md) | Official identity-asset terms, identification use, and unresolved public-distribution questions |
+| [Agent logo usage review](agent-logo-usage-review.md) | Official brand terms, Korean/U.S./EU identification cases, open-source examples, and asset-distribution limits |
 
 ## Prototypes
 
