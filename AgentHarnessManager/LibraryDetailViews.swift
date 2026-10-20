@@ -45,7 +45,7 @@ struct LibrarySkillDetail: View {
                 }
                 detailSection("SKILL.md 원문") {
                     if skill.installations.count > 1 {
-                        Picker("읽을 설치 위치", selection: $selectedInstallationID) {
+                        Picker("읽을 설치 위치", selection: Binding(get: { installation?.id }, set: { selectedInstallationID = $0 })) {
                             ForEach(skill.installations) { Text($0.location.label + " · " + URL(fileURLWithPath: $0.originalPath).lastPathComponent).tag(Optional($0.id)) }
                         }
                     }
@@ -63,10 +63,10 @@ struct LibrarySkillDetail: View {
         .task(id: "\(installation?.entry.id ?? ""):\(store.lastScanned?.timeIntervalSince1970 ?? 0)") {
             document = nil; readError = nil
             guard let installation else { return }
-            let roots = store.registeredRoots + (installation.disabledRecord.map { [$0.readRoot] } ?? [])
+            let roots = store.registeredRoots
             do {
                 let content = try await Task.detached(priority: .userInitiated) {
-                    try SkillCatalog.readDocument(entry: installation.entry, approvedRoots: roots)
+                    try LibraryCatalog.readDocument(installation: installation, roots: roots)
                 }.value
                 if !Task.isCancelled { document = content }
             } catch { if !Task.isCancelled { readError = error.localizedDescription } }
@@ -77,11 +77,15 @@ struct LibrarySkillDetail: View {
             HStack(alignment: .top) {
                 Text(skill.name).font(.title.weight(.semibold)).textSelection(.enabled)
                 Spacer()
-                Toggle("전체 설치 켜기", isOn: Binding(get: { skill.installations.allSatisfy(\.isEnabled) }, set: { enabled in
-                    Task { await store.prepareChange(title: skill.name, installations: skill.installations, enabled: enabled) }
-                })).toggleStyle(.switch).labelsHidden().disabled(!store.canChangeFiles || skill.installations.contains(where: isReadOnly))
+                Toggle(skill.installations.contains(where: \.isSymbolicLink) ? "설치 링크 모두 켜기" : "전체 설치 켜기", isOn: Binding(get: { skill.activationInstallations.allSatisfy(\.isEnabled) }, set: { enabled in
+                    Task { await store.prepareChange(title: skill.name, installations: skill.activationInstallations, enabled: enabled) }
+                })).toggleStyle(.switch).labelsHidden().disabled(!store.canChangeFiles || skill.activationInstallations.contains(where: isReadOnly))
             }
             Text(skill.summary).foregroundStyle(.secondary).textSelection(.enabled)
+            if skill.installations.contains(where: \.isSymbolicLink) {
+                Text("전체 전환은 설치 링크만 바꾸며 공유 원본은 유지합니다. 에이전트별 링크는 아래 설치 위치에서 따로 전환할 수 있습니다.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             HStack {
                 let enabled = skill.installations.filter(\.isEnabled).count
                 Label(enabled == 0 ? "꺼짐" : enabled == skill.installations.count ? "켜짐" : "일부 켜짐", systemImage: enabled == 0 ? "minus.circle" : "checkmark.circle")
@@ -93,24 +97,31 @@ struct LibrarySkillDetail: View {
         }
     }
     private func isReadOnly(_ item: SkillInstallation) -> Bool {
-        item.isSymbolicLink || item.readError != nil
-            || !store.automaticRoots.contains(where: { $0.id == item.location.id })
-            || URL(fileURLWithPath: item.originalPath).deletingLastPathComponent().path != item.location.url.path
-            || skill.installations.contains(where: \.isSymbolicLink)
+        readOnlyReason(item) != nil
+    }
+    private func readOnlyReason(_ item: SkillInstallation) -> String? {
+        LibraryService.readOnlyReason(for: item, allInstallations: store.allInstallations, managedRoots: store.automaticRoots)
     }
     private func locationCard(_ item: SkillInstallation) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label(item.location.label, systemImage: item.isSymbolicLink ? "link" : "folder")
+                Label(item.location.label + (item.isSymbolicLink ? " · 설치 링크" : skill.installations.contains(where: \.isSymbolicLink) ? " · 공유 원본" : ""), systemImage: item.isSymbolicLink ? "link" : "folder")
                 Spacer()
                 Toggle(item.isEnabled ? "켜짐" : "꺼짐", isOn: Binding(get: { item.isEnabled }, set: { enabled in
                     Task { await store.prepareChange(title: item.name + " · " + item.location.label, installations: [item], enabled: enabled) }
                 })).toggleStyle(.switch).controlSize(.small).disabled(!store.canChangeFiles || isReadOnly(item))
                     .accessibilityLabel("\(item.location.label), \(item.originalPath), 켜기")
+                    .help(readOnlyReason(item) ?? (item.isSymbolicLink ? "원본을 유지하고 이 설치 링크만 전환합니다." : "이 설치 폴더를 전환합니다."))
             }.font(.callout.weight(.medium))
             Text(item.currentPath).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
             if !item.isEnabled { Text("복원 위치: " + item.originalPath).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
-            if let target = item.resolvedPath { Text("공유 원본: " + target).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
+            if let target = item.resolvedPath {
+                Text((item.disabledRecord?.link == nil ? "공유 원본: " : "원래 위치 기준 원본: ") + target).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+            if let link = item.disabledRecord?.link, !link.text.hasPrefix("/") {
+                Label("상대 링크는 보관 위치에서 직접 열지 말고 위 원본 경로와 앱의 원문 보기를 사용하세요.", systemImage: "info.circle")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             HStack {
                 Button("경로 복사") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(item.currentPath, forType: .string) }
                 Button("Finder에서 보기") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: item.currentPath)]) }
@@ -121,7 +132,7 @@ struct LibrarySkillDetail: View {
                 Button("출처 연결…") { editingSource = item.entry }
                     .font(.caption).disabled(!item.isEnabled || store.isScanning || store.sourcesLoadFailed)
             }
-            Text(isReadOnly(item) ? "이 설치는 읽기 전용입니다. 기본 경로의 독립된 폴더만 전환할 수 있으며 링크·공유 원본·추가 경로는 보호합니다." : "파일 상태이며 에이전트의 현재 대화에 반영됐는지는 확인하지 않습니다.")
+            Text(readOnlyReason(item) ?? (item.isSymbolicLink ? "이 에이전트의 설치 링크만 보관·복원합니다. 원본과 다른 에이전트의 직접 링크는 유지합니다." : "파일 상태이며 에이전트의 현재 대화에 반영됐는지는 확인하지 않습니다."))
                 .font(.caption).foregroundStyle(.secondary)
         }.padding(14).background(WorkbenchTheme.raised, in: RoundedRectangle(cornerRadius: 8))
     }
@@ -155,7 +166,9 @@ struct GroupDetail: View {
                                 Text(skill.summary).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                             }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                         }.buttonStyle(.plain)
-                        Text(skill.isEnabled ? "켜짐" : "꺼짐").font(.caption).foregroundStyle(.secondary)
+                        let targets = skill.activationInstallations
+                        let on = targets.filter(\.isEnabled).count
+                        Text((skill.installations.contains(where: \.isSymbolicLink) ? "설치 링크 · " : "") + (on == 0 ? "꺼짐" : on == targets.count ? "켜짐" : "일부 켜짐")).font(.caption).foregroundStyle(.secondary)
                     }.padding(14).background(WorkbenchTheme.raised, in: RoundedRectangle(cornerRadius: 8))
                 }
                 let missing = group.skillIDs.subtracting(store.skills.map(\.id))
@@ -166,6 +179,9 @@ struct GroupDetail: View {
                     detailSection("이전 작업 구성의 메모") { Text(profile.note).textSelection(.enabled) }
                 }
                 Text("그룹 선택과 설치 위치의 실제 상태는 별개입니다. 편집·삭제는 파일을 바꾸지 않으며, 켜기·끄기에 필요한 파일 변경은 검토 후 적용합니다.").font(.caption).foregroundStyle(.secondary)
+                if members.contains(where: { $0.installations.contains(where: \.isSymbolicLink) }) {
+                    Text("공유 스킬은 설치 링크만 전환하고 원본 폴더는 유지합니다. 라이브러리의 전체 파일 상태에는 유지한 원본도 포함됩니다.").font(.caption).foregroundStyle(.secondary)
+                }
                 Button("그룹 삭제", role: .destructive) { confirmDeletion = true }.disabled(!store.metadataIsEditable)
             }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -294,6 +310,11 @@ private struct MutationMoveCard: View {
             Label(move.installation.name + " · " + (move.enabled ? "원래 위치로 복원" : "발견 경로 밖에 보관"),
                   systemImage: move.enabled ? "arrow.uturn.backward" : "archivebox").font(.callout.weight(.medium))
             Text(move.installation.location.label).font(.caption).foregroundStyle(.secondary)
+            if let link = move.installation.link {
+                Label("설치 링크만 이동 · 공유 원본 유지", systemImage: "link").font(.caption)
+                Text("원본: " + link.targetPath + "\n링크 문자: " + link.text)
+                    .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+            }
             Text(move.source + "\n→ " + move.destination).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
             HStack {
                 Button("경로 복사") {
@@ -322,7 +343,7 @@ struct MutationPreview: View {
                     ForEach(plan.installations) { MutationMoveCard(move: $0) }
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }.frame(maxHeight: 320)
-            Text("발견 경로 밖의 같은 볼륨에 폴더를 보관하거나 원래 위치로 복원하며 기존 파일을 덮어쓰지 않습니다. 중단되면 기록된 작업을 복구할 수 있습니다. 에이전트의 현재 대화 상태는 바뀌지 않을 수 있습니다.").font(.caption).foregroundStyle(.secondary)
+            Text("설치 폴더 또는 링크를 발견 경로 밖에 보관하거나 원래 위치로 복원하며 기존 파일을 덮어쓰지 않습니다. 링크의 공유 원본은 이동하지 않습니다. 중단되면 기록된 작업을 복구할 수 있습니다. 에이전트의 현재 대화 상태는 바뀌지 않을 수 있습니다.").font(.caption).foregroundStyle(.secondary)
             HStack {
                 if store.isMutating { ProgressView().controlSize(.small); Text("적용 중…").font(.caption) }
                 Spacer()

@@ -637,8 +637,8 @@ extension AppStore {
         isPreparingChange = true
         defer { isPreparingChange = false }
         let all = allInstallations, managed = automaticRoots, protected = registeredRoots
-        let onItems = skills.filter { keepOn.contains($0.id) }.flatMap(\.installations)
-        let offItems = skills.filter { turnOff.contains($0.id) }.flatMap(\.installations)
+        let onItems = skills.filter { keepOn.contains($0.id) }.flatMap(\.activationInstallations)
+        let offItems = skills.filter { turnOff.contains($0.id) }.flatMap(\.activationInstallations)
         let selection = GroupSelectionChange(before: preferences.activeGroupIDs, after: targetIDs, previousChangeID: journal.groupSelection?.id)
         do {
             let plan = try await Task.detached(priority: .userInitiated) {

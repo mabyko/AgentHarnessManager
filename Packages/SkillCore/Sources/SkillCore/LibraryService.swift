@@ -9,6 +9,12 @@ public struct DirectoryIdentity: Codable, Hashable, Sendable {
     func matches(_ info: stat) -> Bool { device == info.st_dev && inode == info.st_ino }
 }
 
+public struct StoredLink: Codable, Equatable, Sendable {
+    public let text: String
+    public let targetPath: String
+    public let targetIdentity: DirectoryIdentity
+}
+
 public struct DisabledInstallation: Codable, Identifiable, Equatable, Sendable {
     public let id: String
     public let name: String
@@ -20,10 +26,11 @@ public struct DisabledInstallation: Codable, Identifiable, Equatable, Sendable {
     public let physicalStorageParent: String
     public let storageParentIdentity: DirectoryIdentity
     public let identity: DirectoryIdentity
+    public var link: StoredLink? = nil
     public var readRoot: DiscoveryRoot { DiscoveryRoot(agent: location.agent, url: URL(fileURLWithPath: currentPath), label: location.label) }
     public var matchesCurrentItem: Bool {
         var info = stat()
-        return lstat(currentPath, &info) == 0 && info.st_mode & S_IFMT == S_IFDIR && identity.matches(info)
+        return lstat(currentPath, &info) == 0 && info.st_mode & S_IFMT == (link == nil ? S_IFDIR : S_IFLNK) && identity.matches(info)
     }
 }
 
@@ -92,17 +99,169 @@ public struct LibraryJournal: Codable, Sendable {
     }
 }
 
-/// Only independent, direct child directories in the two default skill roots can be moved outside discovery roots.
-/// Links, nested skills, custom roots and provider-owned caches stay read-only.
+/// Move independent directories or single-hop installation links out of the default discovery roots.
+/// Shared source directories, nested/custom installations and provider-owned caches stay read-only.
 public actor LibraryService {
     private let stateDirectory: URL
     public init(stateDirectory: URL) { self.stateDirectory = stateDirectory }
+
+    public static func readOnlyReason(for item: SkillInstallation, allInstallations: [SkillInstallation], managedRoots: [DiscoveryRoot]) -> String? {
+        guard managedRoots.contains(where: { $0.id == item.location.id }),
+              URL(fileURLWithPath: item.originalPath).deletingLastPathComponent().path == item.location.url.path else {
+            return "기본 경로 바로 아래의 설치만 전환할 수 있습니다. 추가·중첩 경로는 읽기 전용입니다."
+        }
+        let physicalRoot = LibraryCatalog.physicalPath(item.location.url.path) ?? item.location.url.path
+        if (item.originalPath + "/" + physicalRoot).split(separator: "/").contains(where: { ["plugins", "cache", "marketplaces", ".system"].contains(String($0)) }) {
+            return "제공자가 관리하는 캐시와 시스템 설치는 읽기 전용입니다."
+        }
+        if let error = item.readError { return "설치 원본을 확인할 수 없습니다: " + error }
+        if !item.isSymbolicLink {
+            let path = LibraryCatalog.physicalPath(item.originalPath) ?? item.originalPath
+            if allInstallations.contains(where: { other in
+                guard other.id != item.id, let target = other.resolvedPath else { return false }
+                return target == path || target.hasPrefix(path + "/")
+            }) { return "공유 원본은 유지합니다. 사용할 에이전트의 설치 링크를 전환하세요." }
+        }
+        return nil
+    }
+
+    private static func physicalEntryPath(_ path: String) -> String? {
+        let url = URL(fileURLWithPath: path)
+        return LibraryCatalog.physicalPath(url.deletingLastPathComponent().path).map { $0 + "/" + url.lastPathComponent }
+    }
+
+    private static func linkText(_ parent: Int32, _ name: String) throws -> String {
+        var buffer = [UInt8](repeating: 0, count: Int(PATH_MAX) + 1)
+        let count = buffer.withUnsafeMutableBytes { readlinkat(parent, name, $0.baseAddress, $0.count) }
+        guard count > 0, count < buffer.count, let value = String(bytes: buffer.prefix(count), encoding: .utf8) else {
+            throw failure("링크 대상 문자를 안전하게 읽을 수 없습니다.")
+        }
+        return value
+    }
+
+    private static func linkTargetPath(_ text: String, originalPath: String) -> String {
+        text.hasPrefix("/") ? text : URL(fileURLWithPath: originalPath).deletingLastPathComponent().path + "/" + text
+    }
+
+    private static func openDirectLinkTarget(_ path: String) throws -> Int32 {
+        do { return try openDirectory(path) }
+        catch { throw failure("원본을 직접 가리키는 링크만 전환할 수 있습니다. 원본 경로의 다른 링크와 폴더 접근 권한을 확인해 주세요.") }
+    }
+
+    /// Follow only link metadata to detect incoming dependencies, including relative paths and ancestor links.
+    private static func traversesLink(_ path: String, linkPath: String) throws -> Bool {
+        var remaining = path.split(separator: "/").map(String.init), resolved: [String] = [], hops = 0
+        while !remaining.isEmpty {
+            let component = remaining.removeFirst()
+            if component == "." { continue }
+            if component == ".." { if !resolved.isEmpty { resolved.removeLast() }; continue }
+            let current = "/" + (resolved + [component]).joined(separator: "/")
+            if current == linkPath { return true }
+            var info = stat()
+            if lstat(current, &info) != 0 {
+                guard errno == ENOENT || errno == ENOTDIR else { throw failure("링크 의존 경로를 확인할 수 없습니다.") }
+                return false
+            }
+            if info.st_mode & S_IFMT == S_IFLNK {
+                hops += 1
+                guard hops <= 40 else { throw failure("순환 또는 다단계 링크의 영향을 확인할 수 없습니다.") }
+                let text = try linkText(AT_FDCWD, current)
+                if text.hasPrefix("/") { resolved = [] }
+                remaining = text.split(separator: "/").map(String.init) + remaining
+            } else { resolved.append(component) }
+        }
+        return false
+    }
+
+    private static func openLinkTarget(_ link: StoredLink, originalPath: String, roots: [DiscoveryRoot]) throws -> Int32 {
+        let path = linkTargetPath(link.text, originalPath: originalPath)
+        guard LibraryCatalog.physicalPath(path) == link.targetPath,
+              roots.contains(where: { root in
+                  guard let rootPath = LibraryCatalog.physicalPath(root.url.path) else { return false }
+                  return link.targetPath == rootPath || link.targetPath.hasPrefix(rootPath + "/")
+              }) else { throw failure("링크 원본이 없어졌거나 등록한 경로 밖으로 바뀌었습니다.") }
+        // Reject target and ancestor symlinks; the supported installation link has exactly one hop.
+        let fd = try openDirectLinkTarget(path)
+        var info = stat()
+        guard fstat(fd, &info) == 0, link.targetIdentity.matches(info), info.st_mode & S_IFMT == S_IFDIR else {
+            close(fd); throw failure("링크 원본 폴더가 교체되었습니다. 기존 기록을 다른 원본에 연결하지 않습니다.")
+        }
+        return fd
+    }
+
+    public static func readStoredLinkDocument(_ saved: DisabledInstallation, roots: [DiscoveryRoot]) throws -> String {
+        guard let link = saved.link, validPaths(saved, roots: roots), saved.matchesCurrentItem else {
+            throw failure("보관한 설치 링크의 식별 정보를 확인할 수 없습니다.")
+        }
+        let storage = try openDirectory(saved.physicalStorageParent)
+        defer { close(storage) }
+        var info = stat(), item = stat()
+        let name = URL(fileURLWithPath: saved.currentPath).lastPathComponent
+        guard fstat(storage, &info) == 0, saved.storageParentIdentity.matches(info),
+              fstatat(storage, name, &item, AT_SYMLINK_NOFOLLOW) == 0, saved.identity.matches(item),
+              try linkText(storage, name) == link.text else { throw failure("보관한 링크가 교체되거나 바뀌었습니다.") }
+        let target = try openLinkTarget(link, originalPath: saved.originalPath, roots: roots)
+        defer { close(target) }
+        let file = openat(target, "SKILL.md", O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
+        guard file >= 0 else { throw failure("공유 원본의 SKILL.md를 읽을 수 없습니다.") }
+        defer { close(file) }
+        guard let text = String(data: try readRegular(file), encoding: .utf8) else { throw failure("공유 원본 문서가 UTF-8이 아닙니다.") }
+        return text
+    }
+
+    private static func planLink(_ item: SkillInstallation, enabled: Bool, allInstallations: [SkillInstallation],
+                                 managedRoots: [DiscoveryRoot], protectedRoots: [DiscoveryRoot]) throws -> Move {
+        if let reason = readOnlyReason(for: item, allInstallations: allInstallations, managedRoots: managedRoots) { throw failure(reason) }
+        let roots = managedRoots + protectedRoots
+        guard let hash = item.contentHash, let physical = LibraryCatalog.physicalPath(item.location.url.path) else { throw failure("링크 원본과 설치 경로를 읽을 수 없습니다.") }
+        let origin = physical + "/" + URL(fileURLWithPath: item.originalPath).lastPathComponent
+        guard !allInstallations.contains(where: { $0.id != item.id && physicalEntryPath($0.originalPath) == origin }) else {
+            throw failure("같은 설치 링크를 여러 등록 경로에서 읽습니다. 중복 경로를 먼저 해제해 주세요.")
+        }
+        let parent = try openDirectory(physical)
+        defer { close(parent) }
+        let destination = enabled ? item.currentPath : item.location.url.deletingLastPathComponent().appendingPathComponent(".ahm-disabled-" + UUID().uuidString).path
+        guard let storagePath = LibraryCatalog.physicalPath(URL(fileURLWithPath: destination).deletingLastPathComponent().path) else { throw failure("링크 보관 경로를 열 수 없습니다.") }
+        let storage = try openDirectory(storagePath)
+        defer { close(storage) }
+        let containing = item.isEnabled ? parent : storage
+        let name = URL(fileURLWithPath: item.currentPath).lastPathComponent
+        var parentInfo = stat(), storageInfo = stat(), info = stat()
+        guard fstat(parent, &parentInfo) == 0, fstat(storage, &storageInfo) == 0, parentInfo.st_dev == storageInfo.st_dev,
+              fstatat(containing, name, &info, AT_SYMLINK_NOFOLLOW) == 0, info.st_mode & S_IFMT == S_IFLNK else { throw failure("설치 링크나 보관 경로가 바뀌었습니다.") }
+        let text = try linkText(containing, name)
+        guard let targetPath = LibraryCatalog.physicalPath(linkTargetPath(text, originalPath: item.originalPath)),
+              targetPath == item.resolvedPath else { throw failure("깨진 링크이거나 원본이 바뀌었습니다. 새로고침해 주세요.") }
+        let target = try openDirectLinkTarget(linkTargetPath(text, originalPath: item.originalPath))
+        defer { close(target) }
+        var targetInfo = stat()
+        guard fstat(target, &targetInfo) == 0 else { throw failure("링크 원본의 식별 정보를 읽을 수 없습니다.") }
+        let link = StoredLink(text: text, targetPath: targetPath, targetIdentity: DirectoryIdentity(targetInfo))
+        let approved = try openLinkTarget(link, originalPath: item.originalPath, roots: roots)
+        defer { close(approved) }
+        let document = try item.disabledRecord.map { try readStoredLinkDocument($0, roots: roots) }
+            ?? SkillCatalog.readDocument(entry: item.entry, approvedRoots: roots)
+        guard LibraryCatalog.digest(document) == hash else { throw failure("공유 원본 문서가 바뀌었습니다. 새로고침해 주세요.") }
+        let saved = item.disabledRecord ?? DisabledInstallation(id: item.id, name: item.name, originalPath: item.originalPath,
+            currentPath: destination, location: item.location, physicalParent: physical, parentIdentity: DirectoryIdentity(parentInfo),
+            physicalStorageParent: storagePath, storageParentIdentity: DirectoryIdentity(storageInfo), identity: DirectoryIdentity(info), link: link)
+        let move = Move(installation: saved, enabled: enabled, contentHash: hash, treeHash: try hashTree(approved))
+        try validate(move, roots: roots, allowCompleted: false)
+        return move
+    }
 
     public static func plan(title: String, installations: [SkillInstallation], enabled: Bool,
                             allInstallations: [SkillInstallation], managedRoots: [DiscoveryRoot], protectedRoots: [DiscoveryRoot] = []) throws -> MutationPlan {
         var moves: [Move] = []
         var paths = Set<String>()
         for item in installations where item.isEnabled != enabled {
+            if item.isSymbolicLink {
+                let move = try planLink(item, enabled: enabled, allInstallations: allInstallations,
+                                        managedRoots: managedRoots, protectedRoots: protectedRoots)
+                guard paths.insert(item.originalPath).inserted else { continue }
+                moves.append(move)
+                continue
+            }
             guard item.readError == nil, !item.isSymbolicLink, let hash = item.contentHash,
                   managedRoots.contains(where: { $0.id == item.location.id }),
                   URL(fileURLWithPath: item.originalPath).deletingLastPathComponent().path == item.location.url.path,
@@ -155,7 +314,10 @@ public actor LibraryService {
             try validate(move, roots: managedRoots, allowCompleted: false)
             moves.append(move)
         }
-        return MutationPlan(title: title, installations: moves)
+        let plan = MutationPlan(title: title, installations: moves)
+        let roots = Dictionary((managedRoots + protectedRoots).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }).map(\.value)
+        try checkReaders(plan, roots: roots, disabled: allInstallations.compactMap(\.disabledRecord))
+        return plan
     }
 
     public func load(roots: [DiscoveryRoot]) throws -> LibraryJournal {
@@ -190,7 +352,8 @@ public actor LibraryService {
             }
             guard !plan.installations.isEmpty || plan.groupSelection != nil else { return }
             for move in plan.installations { try Self.validate(move, roots: roots, allowCompleted: false) }
-            try Self.checkReaders(plan, roots: roots)
+            try Self.checkReaders(plan, roots: roots, disabled: journal.disabled)
+            if plan.installations.contains(where: { $0.installation.link != nil }) { journal.version = 2 }
             journal.pending = plan
             try writeJournal(journal, directory: directory)
             try finish(&journal, directory: directory, roots: roots)
@@ -203,7 +366,7 @@ public actor LibraryService {
             try validateJournal(journal, roots: roots)
             let plan = try Self.undoPlan(id: id, journal: journal)
             for move in plan.installations { try Self.validate(move, roots: roots, allowCompleted: false) }
-            try Self.checkReaders(plan, roots: roots)
+            try Self.checkReaders(plan, roots: roots, disabled: journal.disabled)
             return plan
         }
     }
@@ -233,7 +396,7 @@ public actor LibraryService {
         guard let plan = journal.pending else { return }
         // Revalidate the entire remainder before resuming any operation. Existing files are never overwritten.
         for move in plan.installations { try Self.validate(move, roots: roots, allowCompleted: true) }
-        try Self.checkReaders(plan, roots: roots)
+        try Self.checkReaders(plan, roots: roots, disabled: journal.disabled)
         for move in plan.installations {
             let fd = try Self.openDirectory(move.installation.physicalParent)
             defer { close(fd) }
@@ -247,7 +410,7 @@ public actor LibraryService {
             if fstatat(sourceFD, source, &info, AT_SYMLINK_NOFOLLOW) == 0 {
                 try Self.validate(move, roots: roots, allowCompleted: false)
                 guard renameatx_np(sourceFD, source, destinationFD, destination, UInt32(RENAME_EXCL)) == 0 else {
-                    throw Self.failure("폴더를 이동하지 못했습니다. 변경 기록을 보존했습니다. 충돌을 해결한 뒤 복구를 다시 시도해 주세요.")
+                    throw Self.failure("설치 항목을 이동하지 못했습니다. 변경 기록을 보존했습니다. 충돌을 해결한 뒤 복구를 다시 시도해 주세요.")
                 }
                 guard fsync(fd) == 0, fsync(storage) == 0 else { throw Self.failure("폴더 변경을 디스크에 기록하지 못했습니다. 복구가 필요합니다.") }
             }
@@ -281,7 +444,7 @@ public actor LibraryService {
     }
 
     private func validateJournal(_ journal: LibraryJournal, roots: [DiscoveryRoot]) throws {
-        guard journal.version == 1, Set(journal.disabled.map(\.id)).count == journal.disabled.count,
+        guard [1, 2].contains(journal.version), Set(journal.disabled.map(\.id)).count == journal.disabled.count,
               Set(journal.completed.map(\.id)).count == journal.completed.count,
               journal.pending.map({ Set($0.installations.map(\.id)).count == $0.installations.count }) ?? true else {
             throw Self.failure("변경 기록 형식을 확인할 수 없습니다. 기존 데이터를 보존하고 파일 변경을 잠갔습니다.")
@@ -291,14 +454,23 @@ public actor LibraryService {
         }
     }
 
-    private static func checkReaders(_ plan: MutationPlan, roots: [DiscoveryRoot]) throws {
-        guard plan.installations.contains(where: { !$0.enabled }) else { return }
+    private static func checkReaders(_ plan: MutationPlan, roots: [DiscoveryRoot], disabled: [DisabledInstallation]) throws {
+        guard plan.installations.contains(where: { !$0.enabled || $0.installation.link != nil }) else { return }
         let snapshot = SkillCatalog.scan(roots: roots)
         guard snapshot.roots.allSatisfy({ $0.status == .available || $0.status == .missing }) else {
             throw failure("공유 링크에 미치는 영향을 확인할 수 없습니다. 경로 문제를 해결한 뒤 다시 시도해 주세요.")
         }
-        for move in plan.installations where !move.enabled {
-            let source = move.installation.physicalParent + "/" + URL(fileURLWithPath: move.installation.originalPath).lastPathComponent
+        for move in plan.installations where !move.enabled || move.installation.link != nil {
+            let source = (move.enabled ? move.installation.physicalStorageParent : move.installation.physicalParent)
+                + "/" + URL(fileURLWithPath: move.source).lastPathComponent
+            if move.installation.link != nil {
+                let readers = snapshot.entries.filter { $0.isSymbolicLink && physicalEntryPath($0.url.path) != source }
+                if try readers.contains(where: { try traversesLink($0.url.path, linkPath: source) })
+                    || roots.contains(where: { (try? traversesLink($0.url.path, linkPath: source)) != false }) {
+                    throw failure("다른 설치 항목이나 등록 경로가 이 링크를 거쳐 원본을 읽습니다. 의존 링크를 먼저 정리해 주세요.")
+                }
+                continue
+            }
             if roots.contains(where: { root in
                 guard let path = LibraryCatalog.physicalPath(root.url.path) else { return false }
                 return path == source || path.hasPrefix(source + "/")
@@ -306,6 +478,9 @@ public actor LibraryService {
                 guard entry.url.path != move.installation.originalPath else { return false }
                 let target = entry.resolvedURL?.path ?? LibraryCatalog.physicalPath(entry.url.path)
                 return target == source || target?.hasPrefix(source + "/") == true
+            }) || disabled.contains(where: { saved in
+                guard let target = saved.link?.targetPath else { return false }
+                return target == source || target.hasPrefix(source + "/")
             }) { throw failure("이 스킬을 가리키는 공유 링크가 있습니다. 원본을 읽기 전용으로 유지합니다.") }
         }
     }
@@ -345,9 +520,19 @@ public actor LibraryService {
         let toError = errno
         let name: String
         let containingFD: Int32
-        if fromResult == 0 && toResult != 0 && toError == ENOENT && saved.identity.matches(source) && source.st_mode & S_IFMT == S_IFDIR { name = from; containingFD = sourceFD }
-        else if allowCompleted && fromResult != 0 && fromError == ENOENT && toResult == 0 && saved.identity.matches(destination) && destination.st_mode & S_IFMT == S_IFDIR { name = to; containingFD = destinationFD }
+        let kind = saved.link == nil ? S_IFDIR : S_IFLNK
+        if fromResult == 0 && toResult != 0 && toError == ENOENT && saved.identity.matches(source) && source.st_mode & S_IFMT == kind { name = from; containingFD = sourceFD }
+        else if allowCompleted && fromResult != 0 && fromError == ENOENT && toResult == 0 && saved.identity.matches(destination) && destination.st_mode & S_IFMT == kind { name = to; containingFD = destinationFD }
         else { throw failure("출발·도착 위치가 바뀌었거나 기존 폴더와 충돌합니다. 파일을 덮어쓰지 않고 중단했습니다.") }
+        if let link = saved.link {
+            guard try linkText(containingFD, name) == link.text else { throw failure("링크 대상 문자가 바뀌었습니다. 변경을 멈췄습니다.") }
+            let target = try openLinkTarget(link, originalPath: saved.originalPath, roots: roots)
+            defer { close(target) }
+            guard try hashDocument(target) == move.contentHash, let hash = move.treeHash, try hashTree(target) == hash else {
+                throw failure("공유 원본의 내용이 검토 또는 실행 후 바뀌었습니다. 새 계획을 검토해 주세요.")
+            }
+            return
+        }
         let child = openat(containingFD, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard child >= 0 else { throw failure("설치 폴더를 다시 열 수 없습니다.") }
         defer { close(child) }

@@ -13,11 +13,13 @@ A native macOS library for agent skills, built with SwiftUI. Browse skills and t
 - Read original documents, inspect installation paths and provenance, and save favorites.
 - Create, edit, and delete groups. Existing work configurations are imported once, with original notes and missing references preserved in the legacy view.
 - Switch groups together or turn other groups off. Overlapping members remain enabled for another active group; ungrouped skills are unaffected.
-- Enable or disable independent skill directories directly inside the two default roots after a change preview. Links, shared readers, nested or custom locations, and protected provider caches remain read-only. A fresh scan and identity/content checks run before applying changes.
+- Enable or disable independent directories and healthy single-hop installation links directly inside the two default roots after a change preview. Shared source directories stay in place; nested/custom locations and protected provider caches remain read-only. Broken, indirect, or unapproved links are blocked. A fresh scan and identity/content checks run before applying changes.
 - Keep a durable journal, reject destination collisions, and resume interrupted changes. A pending operation blocks other writes until recovery succeeds.
 - Browse pending and completed changes, search installation paths, and review an inverse plan before undoing a supported completed operation. Both records are retained. Group selections are reconciled from the journal after restart or recovery.
 - Inspect local document/metadata/path findings and save up to 50 review snapshots, with hashes and a current-state comparison. This is a local check, not AI review.
 - Manage paths and system/light/dark appearance in Settings. Removing a registered path does not remove files.
+
+Group and whole-skill switches act on installation links when a skill has a shared source. The source stays enabled and counts toward the library’s observed file state, even when all its installation links are off. Individual agent links can be switched separately.
 
 Group activation selections are separate from actual installation state. Group editing and favorites change metadata only. File switches require a separate preview and Apply action. Discovered or enabled files do not prove that an agent loaded them into its current conversation.
 
@@ -63,9 +65,11 @@ Personal signing settings belong in the ignored `Config/Local.xcconfig`. See [CO
 
 The app stores groups, favorites, local review history, legacy work configurations, manual source associations, additional paths, and appearance preferences locally in `UserDefaults`. Group migration leaves the original work-configuration bytes intact. Corrupt group/review/provenance data is preserved and its writes are blocked. The current app has no accounts, telemetry, or network requests and does not execute skill scripts.
 
-File changes use `~/Library/Application Support/<bundle-id>/Library/library-journal.json`, protected by an exclusive lock and atomic, synced journal writes. Disabled folders are moved to unique `.ahm-disabled-<UUID>` siblings of the discovery root (for example, under `~/.agents`, outside `~/.agents/skills`) on the same volume, and are read through their journal records. The original installation identity survives disable/restore. Keep the journal and these folders when backing up or removing the app while skills are disabled. Interrupted operations resume the recorded plan. The latest 100 completed operations are retained. Undo records a new inverse operation and rejects newer changes to the same installation, edited content, path collisions, and newly discovered shared readers. Older records without a directory fingerprint remain readable but cannot be undone. Undoing an undo and force recovery are not supported.
+File changes use `~/Library/Application Support/<bundle-id>/Library/library-journal.json`, protected by an exclusive lock and atomic, synced journal writes. Disabled folders or installation links are moved to unique `.ahm-disabled-<UUID>` siblings of the discovery root (for example, under `~/.agents`, outside `~/.agents/skills`) on the same volume, and are read through their journal records. The original installation identity survives disable/restore. Keep the journal and these folders when backing up or removing the app while skills are disabled. Interrupted operations resume the recorded plan. The latest 100 completed operations are retained. Undo records a new inverse operation and rejects newer changes to the same installation, edited content, path collisions, and newly discovered shared readers. Older records without a directory fingerprint remain readable but cannot be undone. Undoing an undo and force recovery are not supported.
 
-New moves fingerprint included file bytes, names, permission modes, directory structure, and symlink text without opening link targets. Fingerprinting is bounded at 64 MiB of regular file content, 10,000 entries, and 32 directory levels; unsupported or unreadable items block the change. Group-selection intent is journaled with file moves and reconciled into preferences after completion or recovery. Group definitions, favorites, and review history are not reverted by undo.
+Directory fingerprints cover included file bytes, names, permission modes, directory structure, and embedded symlink text without opening those embedded targets. Installation-link moves also verify the approved source directory identity and fingerprint; the source itself is never moved or rewritten. Fingerprinting is bounded at 64 MiB of regular file content, 10,000 entries, and 32 directory levels; unsupported or unreadable items block the change. Group-selection intent is journaled with file moves and reconciled into preferences after completion or recovery. Group definitions, favorites, and review history are not reverted by undo.
+
+Installation links retain their exact text and inode when archived. Relative links are read using the recorded original location; the app never follows the archived link, whose text may resolve differently there. Do not open an archived relative link directly in Finder; use the displayed source path or in-app document view. Restoration and undo reject changed link identity/text, replaced sources, destination collisions, and incoming references to either the installed or archived link. The first link operation upgrades the journal to version 2 while retaining prior records; older apps refuse that journal rather than writing it without link metadata.
 
 The scanner reads registered roots. Raw content is limited to regular UTF-8 files up to 2 MiB; link targets outside registered roots are blocked. Scans are bounded at depth 8 and 10,000 candidates per root and report partial results. These are app limits, not agent specifications.
 
@@ -78,7 +82,7 @@ Legacy bundle IDs (`forked.agentskillmanager.local` and `.dev`) are retained to 
 ## Roadmap
 
 - Extend verified discovery rules, provenance formats, and plugin membership.
-- Extend file-switch support beyond independent default-root directories; add broader recovery tools, AI review, and automatic grouping.
+- Extend file-switch support beyond default-root directories and single-hop installation links; add broader recovery tools, AI review, and automatic grouping.
 - Add plugin installation and updates through verified agent-supported workflows, then support MCP servers, hooks, and instructions where applicable.
 - Complete accessibility and distribution validation.
 

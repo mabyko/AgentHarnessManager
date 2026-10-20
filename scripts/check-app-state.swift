@@ -136,6 +136,7 @@ struct AppStateCheck {
         try await checkSources()
         try await checkLibrary()
         try await checkChangeHistory()
+        try await checkLinkSwitching()
         print("PASS: profile create/edit/search/reload/delete, missing members preserved, invalid/corrupt state blocked, filters, fixed default paths, additional path edit/delete/reload, import profiles, reject missing members, preserve imported snapshots, no skill file changes")
     }
 
@@ -251,6 +252,80 @@ struct AppStateCheck {
         precondition(restored.rootFilterID == nil && restored.agentFilter == nil && restored.sourceFilterID == repo.id)
         precondition(!restored.availableAgents.contains(.custom), "Removing the last path removes its agent option without losing the source")
         print("PASS: receipt provenance, copies/links, source counts/search, linked agent/location filters, multiple/empty paths, root edit/removal, manual override/unlink/reload, independent profiles, replacement identity, credential rejection, corrupt metadata preserved, no source file changes")
+    }
+
+    @MainActor private static func checkLinkSwitching() async throws {
+        let files = FileManager.default
+        let home = files.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent("LinkAppCheck-\(UUID().uuidString)")
+        let suite = "LinkAppCheck.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { try? files.removeItem(at: home); defaults.removePersistentDomain(forName: suite) }
+        let source = home.appendingPathComponent(".agents/skills/source")
+        let codexLink = home.appendingPathComponent(".agents/skills/codex-link")
+        let claudeLink = home.appendingPathComponent(".claude/skills/claude-link")
+        let body = "---\nname: shared\ndescription: Linked skill\n---\nOriginal content\n"
+        try files.createDirectory(at: source, withIntermediateDirectories: true)
+        try files.createDirectory(at: claudeLink.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try body.write(to: source.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        try files.createSymbolicLink(atPath: codexLink.path, withDestinationPath: "source")
+        try files.createSymbolicLink(atPath: claudeLink.path, withDestinationPath: "../../.agents/skills/source")
+        let store = AppStore(defaults: defaults, home: home)
+        await store.rescan()
+        precondition(store.skills.count == 1 && store.allInstallations.count == 3)
+        let skillID = store.skills[0].id
+        let sourceID = store.allInstallations.first { !$0.isSymbolicLink }!.id
+        let group = SkillGroup(name: "Linked group", skillIDs: [skillID])
+        precondition(store.saveGroup(group))
+        store.toggleFavorite(skillID)
+        let claude = store.allInstallations.first { $0.originalPath == claudeLink.path }!
+        precondition(store.saveSource(for: claude.entry, input: "owner/shared"))
+        await store.prepareGroupChange(group, enabled: true)
+        precondition(store.preferences.activeGroupIDs == [group.id])
+        await store.prepareChange(title: "Claude link", installations: [claude], enabled: false)
+        precondition(store.mutationPreview?.installations.count == 1 && store.mutationPreview?.installations[0].installation.link != nil)
+        await store.applyPreview()
+        precondition(store.journal.version == 2 && store.skills[0].id == skillID)
+        precondition(store.allInstallations.first { $0.originalPath == codexLink.path }!.isEnabled)
+        let storedClaude = store.allInstallations.first { $0.id == claude.id }!
+        precondition(!storedClaude.isEnabled && storedClaude.isSymbolicLink && storedClaude.readError == nil)
+        precondition(store.sourceRepository(for: storedClaude) == SourceRepository("owner/shared"))
+        let storedDocument = try LibraryCatalog.readDocument(installation: storedClaude, roots: store.registeredRoots)
+        precondition(storedDocument == body)
+        await store.prepareUndo(store.journal.completed[0])
+        await store.applyPreview()
+        await store.prepareGroupChange(group, enabled: false)
+        precondition(store.mutationPreview?.installations.count == 2)
+        precondition(store.mutationPreview!.installations.allSatisfy { $0.installation.link != nil })
+        await store.applyPreview()
+        precondition(store.preferences.activeGroupIDs.isEmpty)
+        precondition(store.skills[0].activationInstallations.allSatisfy { !$0.isEnabled })
+        precondition(store.allInstallations.first { $0.id == sourceID }!.isEnabled)
+        precondition(store.skills[0].isEnabled, "The original source remains enabled even when installation links are off")
+        let reloaded = AppStore(defaults: defaults, home: home)
+        await reloaded.rescan()
+        precondition(reloaded.skills[0].id == skillID && reloaded.preferences.favorites.contains(skillID))
+        precondition(reloaded.groups[0].skillIDs == [skillID] && reloaded.journal.disabled.count == 2)
+        await reloaded.prepareUndo(reloaded.journal.completed[0])
+        await reloaded.applyPreview()
+        precondition(reloaded.preferences.activeGroupIDs == [group.id] && reloaded.journal.disabled.isEmpty)
+        await reloaded.prepareGroupChange(group, enabled: false)
+        let pending = reloaded.mutationPreview!
+        reloaded.cancelPreview()
+        var journal = reloaded.journal; journal.pending = pending
+        let journalPath = home.appendingPathComponent("Library/Application Support/" + (Bundle.main.bundleIdentifier ?? "AgentHarnessManager") + "/Library/library-journal.json")
+        try JSONEncoder().encode(journal).write(to: journalPath)
+        try files.moveItem(atPath: pending.installations[0].source, toPath: pending.installations[0].destination)
+        let recovering = AppStore(defaults: defaults, home: home)
+        await recovering.rescan()
+        precondition(recovering.journal.disabled.count == 1 && recovering.skills[0].id == skillID)
+        await recovering.recoverChanges()
+        precondition(recovering.journal.disabled.count == 2 && recovering.preferences.activeGroupIDs.isEmpty)
+        let original = recovering.allInstallations.first { $0.id == sourceID }!
+        await recovering.prepareChange(title: "Protected source", installations: [original], enabled: false)
+        precondition(recovering.mutationPreview == nil && recovering.libraryMessage != nil)
+        let preservedDocument = try String(contentsOf: source.appendingPathComponent("SKILL.md"), encoding: .utf8)
+        precondition(preservedDocument == body)
+        print("PASS: agent-specific relative link switching, canonical/favorite/group/source identity, shared-source protection, group link-only changes, undo, partial link recovery and selection reconciliation")
     }
 
     @MainActor private static func checkChangeHistory() async throws {

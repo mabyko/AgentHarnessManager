@@ -31,6 +31,11 @@ public struct CanonicalSkill: Identifiable, Sendable {
     public var hasVariants: Bool {
         Set(installations.compactMap(\.contentHash)).count > 1
     }
+    /// Shared source directories stay in place; group and whole-skill actions switch their installation links.
+    public var activationInstallations: [SkillInstallation] {
+        let targets = Set(installations.filter(\.isSymbolicLink).compactMap(\.resolvedPath))
+        return installations.filter { $0.isSymbolicLink || !targets.contains(LibraryCatalog.physicalPath($0.originalPath) ?? $0.originalPath) }
+    }
 }
 
 public struct SkillGroup: Identifiable, Codable, Hashable, Sendable {
@@ -135,6 +140,14 @@ public enum LibraryCatalog {
             installations.append(installation(entry: entry, location: location, roots: roots))
         }
         for saved in disabled {
+            if let link = saved.link {
+                guard saved.matchesCurrentItem else { continue }
+                let entry = SkillEntry(id: "stored-link:" + saved.id, rootID: saved.location.id, agent: saved.location.agent,
+                    name: saved.name, url: URL(fileURLWithPath: saved.currentPath), isSymbolicLink: true,
+                    resolvedURL: URL(fileURLWithPath: link.targetPath))
+                installations.append(installation(entry: entry, location: saved.location, roots: roots, saved: saved))
+                continue
+            }
             // Only a matching physical item can inherit a saved installation identity.
             let scan = SkillCatalog.scan(roots: [saved.readRoot], additionalApprovedRoots: roots)
             guard let entry = scan.entries.first(where: { $0.url.path == saved.currentPath && $0.rootID == saved.readRoot.id }),
@@ -149,14 +162,23 @@ public enum LibraryCatalog {
         }
         return grouped.map { key, values in
             CanonicalSkill(id: "skill:" + key, name: values.first(where: { !$0.isSymbolicLink })?.name ?? values[0].name,
-                           installations: values.sorted { $0.originalPath < $1.originalPath })
+                           installations: values.sorted { $0.isSymbolicLink == $1.isSymbolicLink ? $0.originalPath < $1.originalPath : !$0.isSymbolicLink })
         }.sorted { $0.name == $1.name ? $0.id < $1.id : $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    public static func readDocument(installation: SkillInstallation, roots: [DiscoveryRoot]) throws -> String {
+        if let saved = installation.disabledRecord, saved.link != nil { return try LibraryService.readStoredLinkDocument(saved, roots: roots) }
+        let approved = roots + (installation.disabledRecord.map { [$0.readRoot] } ?? [])
+        return try SkillCatalog.readDocument(entry: installation.entry, approvedRoots: approved)
     }
 
     private static func installation(entry: SkillEntry, location: DiscoveryRoot, roots: [DiscoveryRoot], saved: DisabledInstallation? = nil) -> SkillInstallation {
         var document: String?
         var readError = entry.problem
-        do { document = try SkillCatalog.readDocument(entry: entry, approvedRoots: roots) }
+        do {
+            if let saved, saved.link != nil { document = try LibraryService.readStoredLinkDocument(saved, roots: roots) }
+            else { document = try SkillCatalog.readDocument(entry: entry, approvedRoots: roots) }
+        }
         catch { readError = error.localizedDescription }
         let metadata = metadata(document, fallback: saved?.name ?? entry.name)
         return SkillInstallation(id: saved?.id ?? digest(entry.id), disabledRecord: saved, entry: entry,
