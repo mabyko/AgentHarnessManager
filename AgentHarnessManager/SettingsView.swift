@@ -33,7 +33,7 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(SettingsPage.allCases) { item in
                     Button { page = item } label: {
@@ -43,16 +43,22 @@ struct SettingsView: View {
                             .foregroundStyle(WorkbenchTheme.sidebarText)
                             .background(page == item ? WorkbenchTheme.selection : .clear, in: RoundedRectangle(cornerRadius: 6))
                             .contentShape(Rectangle())
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.plain).keyboardActivation { page = item }
                     .accessibilityIdentifier("settings.page." + item.rawValue)
                     .accessibilityAddTraits(page == item ? .isSelected : [])
                 }
             }
             .padding(12).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(WorkbenchTheme.raised)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 190, max: 230)
+            .frame(width: 190)
+            .accessibilityElement(children: .contain)
             .accessibilityLabel("설정 카테고리")
-        } detail: {
+            Divider().overlay(WorkbenchTheme.border)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(page.title).font(.title2.weight(.semibold))
+                    .foregroundStyle(WorkbenchTheme.sidebarText)
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 8)
             Form {
                     switch page {
                     case .connections: AgentIntegrationSection()
@@ -67,9 +73,12 @@ struct SettingsView: View {
                         }
                     }
             }.formStyle(.grouped)
+                .scrollEdgeEffectHidden(for: .top)
+            }
+            .background(WorkbenchTheme.surface)
         }
-        .navigationSplitViewStyle(.balanced)
-        .frame(minWidth: 840, idealWidth: 900, minHeight: 580, idealHeight: 680)
+        .navigationTitle("설정")
+        .frame(minWidth: 840, minHeight: 580)
         .tint(WorkbenchTheme.accent)
         .task { if !store.hasScanned && !store.isScanning { await store.rescan() } }
     }
@@ -156,6 +165,7 @@ struct SettingsView: View {
                 Spacer()
                 if observation?.status == .available || observation?.status == .partial {
                     Button("Finder에서 보기") { NSWorkspace.shared.activateFileViewerSelecting([root.url]) }
+                        .accessibilityLabel("\(root.label), \(root.url.path), Finder에서 보기")
                 }
                 if !isDefault {
                     Button("수정…") {

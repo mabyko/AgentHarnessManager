@@ -48,6 +48,8 @@ The GitHub Actions workflow is configured to run these checks on pull requests a
 
 For UI changes, also inspect the native app in light and dark mode and verify keyboard access to the affected controls. Run `scripts/check-settings.sh` from a logged-in macOS desktop to check actual settings-category clicks, General, all eight connection rows, and the native skill-path agent picker. It uses synthetic paths and refreshes the native settings screenshots; it is separate from headless CI. Prototype checks do not validate native UI behavior or filesystem writes.
 
+Run `scripts/check-settings.sh --accessibility` for native accessibility-tree names, values and actions, sidebar Tab/Shift-Tab/Space, accessible picker selection, and group-sheet focus/Escape checks. The optional runner requires existing macOS Accessibility access and exits without requesting it when unavailable. It launches only its own isolated fixture; it never changes system keyboard navigation or VoiceOver settings. Spoken VoiceOver output and global all-controls Tab traversal still need manual verification. Failed expectations exit with a log message instead of generating crash dialogs.
+
 ## Pull requests
 
 - Keep changes focused and explain the user-visible result and relevant checks.

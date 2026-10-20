@@ -30,6 +30,8 @@ struct AgentHarnessManagerApp: App {
                 .environment(store)
             .preferredColorScheme(colorScheme)
         }
+        .defaultSize(width: 900, height: 680)
+        .windowResizability(.contentMinSize)
     }
 
     private var colorScheme: ColorScheme? {

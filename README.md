@@ -18,7 +18,8 @@ A native macOS library for agent skills, built with SwiftUI. Browse skills and t
 - Browse pending and completed changes, search installation paths, and review an inverse plan before undoing a supported completed operation. Both records are retained. Group selections are reconciled from the journal after restart or recovery.
 - Inspect local document/metadata/path findings and save up to 50 review snapshots, with hashes and a current-state comparison. This is a local check, not AI review.
 - Manage paths and system/light/dark appearance in Settings. Removing a registered path does not remove files.
-- Connect Codex, Claude Code, and Grok Build through the bundled CLI/stdio MCP server. Agents can inspect skills and local findings, preview enable/disable changes, and queue requests for human review in the app. Connection installation/removal previews the command or MCP entry and backs up existing configuration. Shared compatibility paths remain one installation and show affected agents.
+- Connect Codex, Claude Code, Grok Build, Antigravity, OpenCode, Pi, Devin CLI, and Cursor through the bundled CLI/stdio MCP server. Agents can inspect skills and local findings, preview enable/disable changes, and queue requests for human review in the app. Connection installation/removal previews the command or MCP entry and backs up existing configuration. Shared compatibility paths remain one installation and show affected agents.
+- Navigate custom sidebar controls with the keyboard. Accessibility labels identify each agent action and path; agent names and connection states are read together.
 
 Group and whole-skill switches act on installation links when a skill has a shared source. The source stays enabled and counts toward the library’s observed file state, even when all its installation links are off. Individual agent links can be switched separately.
 

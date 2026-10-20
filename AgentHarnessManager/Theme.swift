@@ -25,3 +25,12 @@ enum WorkbenchTheme {
 extension URL {
     var displayPath: String { (path as NSString).abbreviatingWithTildeInPath }
 }
+
+extension View {
+    func keyboardActivation(_ action: @escaping () -> Void) -> some View {
+        focusable().onKeyPress(keys: [.space, .return]) { _ in
+            action()
+            return .handled
+        }
+    }
+}

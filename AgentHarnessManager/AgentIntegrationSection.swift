@@ -19,15 +19,23 @@ struct AgentIntegrationSection: View {
                 .foregroundStyle(.secondary)
             ForEach(AgentConnectionTarget.allCases) { target in
                 HStack {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Label { Text(target.name) } icon: {
-                            AgentIcon(agent: SkillAgent(rawValue: target.rawValue)!)
+                    HStack(alignment: .top, spacing: 10) {
+                        AgentIcon(agent: SkillAgent(rawValue: target.rawValue)!)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(target.name)
+                            Text(statuses[target] ?? "등록 상태 미확인").font(.caption).foregroundStyle(.secondary)
                         }
-                        Text(statuses[target] ?? "등록 상태 미확인").font(.caption).foregroundStyle(.secondary)
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(target.name)
+                    .accessibilityValue(statuses[target] ?? "등록 상태 미확인")
                     Spacer()
                     Button("연결 설치…") { prepare(target, removing: false) }
+                        .accessibilityLabel("\(target.name) 연결 설치")
+                        .accessibilityIdentifier("agent.connection.install." + target.rawValue)
                     Button("연결 제거…") { prepare(target, removing: true) }
+                        .accessibilityLabel("\(target.name) 연결 제거")
+                        .accessibilityIdentifier("agent.connection.remove." + target.rawValue)
                 }.disabled(busy)
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("agent.connection." + target.rawValue)
@@ -46,7 +54,7 @@ struct AgentIntegrationSection: View {
                 if busy { ProgressView().controlSize(.small).accessibilityLabel("에이전트 연결 설정 확인 중") }
             }
             if let message { Text(message).font(.callout).textSelection(.enabled).accessibilityLabel(message) }
-        } header: { Text("에이전트 연동 · CLI / MCP") }
+        }
         footer: { Text("모델 로그인은 각 에이전트에서 진행합니다. 사용자 범위의 MCP 등록만 추가·제거합니다. 설치 후 에이전트의 새 세션에서 연결을 확인하세요.") }
         .sheet(item: $plan) { selected in
             VStack(alignment: .leading, spacing: 16) {

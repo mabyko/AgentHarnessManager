@@ -5,15 +5,18 @@ import Vision
 
 @main struct Check {
  @MainActor static func main() {
+  func check(_ condition: Bool, _ message: String = "Native settings check failed") {
+   if !condition { fputs("FAIL: " + message + "\n", stderr); exit(1) }
+  }
   let app = NSApplication.shared; app.setActivationPolicy(.accessory)
-  precondition(CommandLine.arguments.count == 2 && CommandLine.arguments[1].hasPrefix("ahm.settings.check."))
+  check(CommandLine.arguments.count == 2 && CommandLine.arguments[1].hasPrefix("ahm.settings.check."))
   let folder = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent().appendingPathComponent("home")
   let defaults = UserDefaults(suiteName: CommandLine.arguments[1])!
   try! FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-  precondition(SettingsPage.allCases.map(\.rawValue) == ["general", "connections", "paths"])
-  precondition(AgentConnectionTarget.allCases.count == 8)
+  check(SettingsPage.allCases.map(\.rawValue) == ["general", "connections", "paths"])
+  check(AgentConnectionTarget.allCases.count == 8)
   for agent in SkillAgent.allCases where agent != .custom {
-   precondition(NSImage(named: "Agent-" + agent.rawValue) != nil, "Bundled agent icon missing: " + agent.rawValue)
+   check(NSImage(named: "Agent-" + agent.rawValue) != nil, "Bundled agent icon missing: " + agent.rawValue)
   }
   let store = AppStore(defaults: defaults, home: folder)
   let root = AnyView(SettingsView().environment(store))
@@ -57,7 +60,7 @@ import Vision
      // Fast OCR can drop the two-letter Pi label; inspect it in the captured screenshots.
      let names = text(excludingIcons: true).map { $0.0.lowercased().replacingOccurrences(of: " ", with: "") }
      for agent in ["codex", "claudecode", "grokbuild", "antigravity", "opencode", "devin", "cursor"] {
-      precondition(names.contains { $0.contains(agent) }, "Connection row missing: " + agent)
+      check(names.contains { $0.contains(agent) }, "Connection row missing: " + agent)
      }
      try! image().representation(using: .png,properties: [:])!.write(to: URL(fileURLWithPath:"docs/design/native-agent-settings-\(name).png"))
      selectPage(2)
@@ -68,7 +71,7 @@ import Vision
       selectPage(2)
       try? await Task.sleep(for: .milliseconds(300))
       let pathText = text().map { $0.0.lowercased().replacingOccurrences(of: " ", with: "") }.joined(separator: " ")
-      if agent != .pi { precondition(pathText.contains(agent.rawValue), "Skill path section missing: " + agent.rawValue) }
+      if agent != .pi { check(pathText.contains(agent.rawValue), "Skill path section missing: " + agent.rawValue) }
       if agent == .pi {
        try! image().representation(using: .png,properties: [:])!.write(to: URL(fileURLWithPath:"/tmp/ahm-pi-paths-\(name).png"))
       }
@@ -76,7 +79,7 @@ import Vision
      try! image().representation(using: .png,properties: [:])!.write(to: URL(fileURLWithPath:"docs/design/native-skill-paths-\(name).png"))
      selectPage(0)
      try? await Task.sleep(for: .milliseconds(300))
-     precondition(!text().contains { $0.0.contains("Grok") }, "General category did not replace the skill paths")
+     check(!text().contains { $0.0.contains("Grok") }, "General category did not replace the skill paths")
     }
     print("PASS: eight bundled agent icons, three settings categories, eight connection rows and agent-specific skill-path panels in light/dark")
    defaults.synchronize()

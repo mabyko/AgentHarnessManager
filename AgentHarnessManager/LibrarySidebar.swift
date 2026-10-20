@@ -24,7 +24,7 @@ struct LibrarySidebar: View {
                                 }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
                                     .background(selected ? WorkbenchTheme.selection : WorkbenchTheme.raised, in: RoundedRectangle(cornerRadius: 8))
                                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? WorkbenchTheme.accent : .clear, lineWidth: 1))
-                            }.buttonStyle(.plain)
+                            }.buttonStyle(.plain).keyboardActivation { store.navigate(filter) }
                                 .foregroundStyle(WorkbenchTheme.sidebarText)
                                 .accessibilityLabel("\(filter.title), \(store.count(filter))개")
                                 .accessibilityAddTraits(selected ? .isSelected : [])
@@ -69,9 +69,9 @@ struct LibrarySidebar: View {
             }
             Divider()
             HStack {
-                Button(action: newGroup) { Label("새 그룹", systemImage: "plus") }.buttonStyle(.plain).disabled(!store.metadataIsEditable)
+                Button(action: newGroup) { Label("새 그룹", systemImage: "plus") }.buttonStyle(.plain).keyboardActivation(newGroup).disabled(!store.metadataIsEditable)
                 Spacer()
-                Button { openSettings() } label: { Label("설정", systemImage: "gearshape") }.labelStyle(.iconOnly).buttonStyle(.plain)
+                Button { openSettings() } label: { Label("설정", systemImage: "gearshape") }.labelStyle(.iconOnly).buttonStyle(.plain).keyboardActivation { openSettings() }
             }.padding(16)
         }
     }
@@ -92,6 +92,8 @@ struct LibrarySidebar: View {
             }.foregroundStyle(WorkbenchTheme.sidebarText).padding(8)
                 .background(selected ? WorkbenchTheme.selection : .clear, in: RoundedRectangle(cornerRadius: 6))
                 .contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
+        }.buttonStyle(.plain).keyboardActivation(action)
+            .accessibilityLabel("\(title), \(count)개")
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

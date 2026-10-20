@@ -19,12 +19,14 @@ struct GroupEditor: View {
         VStack(alignment: .leading, spacing: 16) {
             Text(group.name.isEmpty ? "새 그룹" : "그룹 편집").font(.title2.weight(.semibold))
             TextField("그룹 이름", text: $name).textFieldStyle(.roundedBorder).focused($nameFocused)
+                .accessibilityLabel("그룹 이름")
             HStack {
                 Text("스킬 \(selectedIDs.count)개 선택").font(.headline)
                 Spacer()
                 Button("선택 해제") { selectedIDs.removeAll() }
             }
             TextField("스킬 검색", text: $query).textFieldStyle(.roundedBorder)
+                .accessibilityLabel("그룹에 넣을 스킬 검색")
             if !missingIDs.isEmpty {
                 HStack {
                     Label("목록에 없는 스킬 \(missingIDs.count)개 보존", systemImage: "exclamationmark.triangle")
