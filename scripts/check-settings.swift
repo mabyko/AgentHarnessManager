@@ -18,7 +18,15 @@ import Vision
   for agent in SkillAgent.allCases where agent != .custom {
    check(NSImage(named: "Agent-" + agent.rawValue) != nil, "Bundled agent icon missing: " + agent.rawValue)
   }
-  let store = AppStore(defaults: defaults, home: folder)
+  let bin = folder.appendingPathComponent("bin")
+  try! FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+  for name in ["codex", "opencode"] {
+   let executable = bin.appendingPathComponent(name)
+   try! Data("#!/bin/sh\nexit 99\n".utf8).write(to: executable)
+   try! FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+  }
+  let store = AppStore(defaults: defaults, home: folder,
+                       installationDetector: AgentInstallationDetector(executableDirectories: [bin], applicationDirectories: []))
   let root = AnyView(SettingsView().environment(store))
   let view = NSHostingView(rootView: root)
   let window = NSWindow(contentRect: NSRect(x: 80,y: 60,width: 900,height: 900), styleMask: [.titled,.closable,.resizable], backing: .buffered, defer: false)

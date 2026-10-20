@@ -95,3 +95,11 @@ Only existing supported default-root installation switches are offered. Shared s
 ## Verification
 
 `scripts/check-management.sh` runs the actual CLI/MCP subprocess against synthetic skills and an isolated preferences domain. Core tests cover request validation, stale resources, private queue persistence, reviewed config changes, backups, same-name conflicts, and symlink rejection. App-state checks exercise request → rebuilt preview → cancel/apply → journal correlation. Tests use no real credentials or AI requests. Real agent session adoption must still be checked after the user installs the connection.
+
+## Installation visibility
+
+The sidebar shows detected installed agents and explicitly registered custom agents. Settings retains every supported target, including undetected installations. Skill discovery, saved paths, groups, favorites and source data remain independent of that presentation filter.
+
+Installation detection reads local file metadata only. It checks absolute PATH entries and common CLI directories, plus executable Codex, Antigravity, OpenCode and Cursor app bundles in `/Applications` and `~/Applications`. It never runs an agent, login or version command. This is a best-effort hint: custom locations, renamed apps and unavailable version-manager shims can lead to missing or inaccurate results.
+
+Settings shows installation separately from MCP registration. Missing installations disable connection installation. Codex/Claude/Grok need an executable CLI for configuration commands, so app-only Codex remains visible in the sidebar but needs its CLI before registering a connection. JSON-based targets can remove a reviewed existing registration after uninstalling the agent. **설치 상태 확인** refreshes the filesystem hint; **등록 상태 확인** retains the explicit configuration-status workflow described above.

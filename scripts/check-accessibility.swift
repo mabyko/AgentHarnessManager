@@ -87,12 +87,17 @@ import SwiftUI
         for target in names {
             let row = find("agent.connection." + target.rawValue)
             let children = elements(row)
-            check(children.contains { string($0, "AXDescription") == target.name && string($0, "AXValue") == "등록 상태 미확인" })
+            let installed = [.codex, .opencode].contains(target)
+            check(children.contains { string($0, "AXDescription") == target.name && string($0, "AXValue").contains(installed ? "CLI 설치 감지됨" : "미설치") })
             for action in ["install", "remove"] {
                 let button = find("agent.connection." + action + "." + target.rawValue)
                 check(string(button, "AXRole") == "AXButton" && string(button, "AXDescription").contains(target.name))
-                var actions: CFArray?
-                check(AXUIElementCopyActionNames(button, &actions) == .success && (actions as? [String] ?? []).contains("AXPress"))
+                let enabled = action == "install" ? installed : (!target.requiresCLIForConnection || installed)
+                check((value(button, "AXEnabled") as? Bool) == enabled, "Installation status must control button availability: " + target.rawValue + "." + action)
+                if enabled {
+                    var actions: CFArray?
+                    check(AXUIElementCopyActionNames(button, &actions) == .success && (actions as? [String] ?? []).contains("AXPress"))
+                }
             }
             check(!children.contains { string($0, "AXRole") == "AXImage" }, "Decorative agent icons must not be announced")
         }
@@ -117,6 +122,7 @@ import SwiftUI
         check(AXUIElementPerformAction(library, "AXRaise" as CFString) == .success)
         let newGroup = elements(library).first { string($0, "AXRole") == "AXButton" && string($0, "AXDescription") == "새 그룹" }!
         check(elements(library).contains { string($0, "AXRole") == "AXButton" && string($0, "AXDescription") == "Codex, 1개" })
+        check(!elements(library).contains { string($0, "AXRole") == "AXButton" && string($0, "AXDescription") == "Claude Code, 1개" }, "An uninstalled agent must be absent from the library sidebar")
         focus(newGroup); key(49)
         wait("Keyboard action did not open the group sheet") { elements(app).contains { string($0, "AXRole") == "AXSheet" } }
         wait("Group name field did not receive focus") {
@@ -139,7 +145,15 @@ import SwiftUI
             try "---\nname: \(folder.lastPathComponent)\ndescription: Synthetic accessibility fixture\n---\nRead only test content.\n".write(to: folder.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
         }
         let defaults = UserDefaults(suiteName: suite)!
-        let store = AppStore(defaults: defaults, home: home)
+        let bin = home.appendingPathComponent("bin")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        for name in ["codex", "opencode"] {
+            let executable = bin.appendingPathComponent(name)
+            try Data("#!/bin/sh\nexit 99\n".utf8).write(to: executable)
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+        }
+        let store = AppStore(defaults: defaults, home: home,
+                             installationDetector: AgentInstallationDetector(executableDirectories: [bin], applicationDirectories: []))
         func window<V: View>(_ root: V, id: String, size: NSSize) -> NSWindow {
             let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: 80, y: 80), size: size), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false

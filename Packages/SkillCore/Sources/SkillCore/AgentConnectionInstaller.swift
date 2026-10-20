@@ -5,6 +5,7 @@ import Foundation
 public enum AgentConnectionTarget: String, CaseIterable, Sendable, Identifiable {
     case codex, claudeCode, grokBuild, antigravity, opencode, pi, devin, cursor
     public var id: String { rawValue }
+    public var requiresCLIForConnection: Bool { !editsConfiguration }
     public var name: String {
         SkillAgent(rawValue: rawValue)!.displayName
     }
@@ -205,11 +206,7 @@ public actor AgentConnectionInstaller {
     }
 
     private func findExecutable(_ name: String) -> URL? {
-        let paths = (environment["PATH"] ?? "").split(separator: ":").map(String.init)
-            + [home.appendingPathComponent(".local/bin").path, home.appendingPathComponent(".grok/bin").path,
-               "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
-        return paths.filter { $0.hasPrefix("/") }.map { URL(fileURLWithPath: $0).appendingPathComponent(name) }
-            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
+        AgentInstallationDetector(home: home, environment: environment).findExecutable(name)
     }
 
     private func configurationData(_ url: URL) throws -> Data? { try MCPConfigurationFile.read(url) }

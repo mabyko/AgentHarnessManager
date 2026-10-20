@@ -118,6 +118,9 @@ final class AppStore {
     private(set) var isScanning = false
     private(set) var hasScanned = false
     private(set) var lastScanned: Date?
+    private(set) var agentInstallations: [AgentConnectionTarget: AgentInstallation] = [:]
+    @ObservationIgnored private let installationDetector: AgentInstallationDetector
+    @ObservationIgnored private var installationGeneration = 0
     private(set) var registeredRoots: [DiscoveryRoot]
     private(set) var snapshot = CatalogSnapshot(entries: [], roots: [])
     let automaticRoots: [DiscoveryRoot]
@@ -129,9 +132,11 @@ final class AppStore {
     // ponytail: UserDefaults stores metadata only; join the journal-backed state before enabling file changes.
     private static let profilesKey = "workProfiles"
 
-    init(defaults: UserDefaults = .standard, home: URL = FileManager.default.homeDirectoryForCurrentUser) {
+    init(defaults: UserDefaults = .standard, home: URL = FileManager.default.homeDirectoryForCurrentUser,
+         installationDetector: AgentInstallationDetector? = nil) {
         self.defaults = defaults
         self.home = home
+        self.installationDetector = installationDetector ?? AgentInstallationDetector(home: home)
         libraryService = LibraryService(stateDirectory: home.resolvingSymlinksInPath()
             .appendingPathComponent("Library/Application Support/" + (Bundle.main.bundleIdentifier ?? "AgentHarnessManager") + "/Library"))
         agentRequestStore = AgentRequestStore(stateDirectory: home.resolvingSymlinksInPath()
@@ -237,6 +242,25 @@ final class AppStore {
         registeredRoots.first { $0.id == entry.rootID }.map { agents(for: $0) } ?? [entry.agent]
     }
     var availableAgents: [SkillAgent] { SkillAgent.allCases.filter { agent in registeredRoots.contains { agents(for: $0).contains(agent) } } }
+    var sidebarAgents: [SkillAgent] {
+        availableAgents.filter { agent in
+            agent == .custom || AgentConnectionTarget(rawValue: agent.rawValue).map { agentInstallations[$0]?.isInstalled == true } == true
+        }
+    }
+
+    func refreshAgentInstallations() async {
+        installationGeneration += 1
+        let generation = installationGeneration
+        let detector = installationDetector
+        let detected = await Task.detached(priority: .utility) { detector.scan() }.value
+        guard generation == installationGeneration else { return }
+        let previous = agentInstallations
+        agentInstallations = detected
+        if let filter = agentFilter, let target = AgentConnectionTarget(rawValue: filter.rawValue),
+           previous[target]?.isInstalled == true, detected[target]?.isInstalled == false, rootFilterID == nil {
+            agentFilter = nil
+        }
+    }
     var availableRoots: [DiscoveryRoot] { registeredRoots.filter { agentFilter == nil || agents(for: $0).contains(agentFilter!) } }
     var hasFilters: Bool { !search.isEmpty || agentFilter != nil || linksOnly || rootFilterID != nil }
     var filteredEntries: [SkillEntry] {
@@ -348,6 +372,7 @@ final class AppStore {
         let inputs = registeredRoots
         guard !isMutating, !isPreparingChange else { return }
         isScanning = true
+        await refreshAgentInstallations()
         let home = home
         let managed = automaticRoots
         let saved: LibraryJournal

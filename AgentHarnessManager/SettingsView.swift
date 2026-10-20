@@ -90,6 +90,11 @@ struct SettingsView: View {
                     Label { Text(agent.displayName) } icon: { AgentIcon(agent: agent) }.tag(agent)
                 }
             }.pickerStyle(.menu).accessibilityIdentifier("settings.pathAgent")
+            if let target = AgentConnectionTarget(rawValue: pathAgent.rawValue) {
+                LabeledContent("설치 상태", value: store.agentInstallations[target]?.label ?? "확인 중…")
+                Text("에이전트 설치 여부와 관계없이 등록한 스킬 경로를 확인하고 관리할 수 있습니다.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         if pathAgent != .custom {
             let agent = pathAgent

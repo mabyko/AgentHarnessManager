@@ -45,7 +45,7 @@ targets:
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: YES
         MARKETING_VERSION: "0.1.0"
-        CURRENT_PROJECT_VERSION: "20"
+        CURRENT_PROJECT_VERSION: "21"
       configs:
         Debug:
           ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon-Dev

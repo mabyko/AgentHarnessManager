@@ -32,10 +32,14 @@ struct LibrarySidebar: View {
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         sectionTitle("에이전트")
-                        ForEach(store.availableAgents, id: \.self) { agent in
+                        ForEach(store.sidebarAgents, id: \.self) { agent in
                             row(agent.displayName, count: store.skills.filter { $0.installations.contains { store.agents(for: $0.location).contains(agent) } }.count,
                                 selected: store.page == .library && store.agentFilter == agent,
                                 action: { store.navigate(agent: agent) }) { AgentIcon(agent: agent) }
+                        }
+                        if store.sidebarAgents.isEmpty {
+                            Text(store.agentInstallations.isEmpty ? "설치 상태 확인 중…" : "설치가 감지된 에이전트가 없습니다. 설정에서 설치 상태를 확인하세요.")
+                                .font(.caption).foregroundStyle(WorkbenchTheme.sidebarSecondary).padding(8)
                         }
                     }
                     VStack(alignment: .leading, spacing: 4) {

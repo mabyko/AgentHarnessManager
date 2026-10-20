@@ -23,24 +23,29 @@ struct AgentIntegrationSection: View {
                         AgentIcon(agent: SkillAgent(rawValue: target.rawValue)!)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(target.name)
-                            Text(statuses[target] ?? "등록 상태 미확인").font(.caption).foregroundStyle(.secondary)
+                            Text(statusText(target)).font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel(target.name)
-                    .accessibilityValue(statuses[target] ?? "등록 상태 미확인")
+                    .accessibilityValue(statusText(target))
+                    .help(store.agentInstallations[target]?.executableURL?.path
+                          ?? store.agentInstallations[target]?.applicationURL?.path ?? "CLI 또는 앱 설치를 감지하지 못했습니다.")
                     Spacer()
                     Button("연결 설치…") { prepare(target, removing: false) }
                         .accessibilityLabel("\(target.name) 연결 설치")
                         .accessibilityIdentifier("agent.connection.install." + target.rawValue)
+                        .disabled(store.agentInstallations[target]?.canInstallConnection(for: target) != true)
                     Button("연결 제거…") { prepare(target, removing: true) }
                         .accessibilityLabel("\(target.name) 연결 제거")
                         .accessibilityIdentifier("agent.connection.remove." + target.rawValue)
+                        .disabled(target.requiresCLIForConnection && store.agentInstallations[target]?.executableURL == nil)
                 }.disabled(busy)
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("agent.connection." + target.rawValue)
             }
             HStack {
+                Button("설치 상태 확인") { refreshInstallations() }.disabled(busy || store.isScanning)
                 Button("등록 상태 확인") { refreshStatuses() }.disabled(busy)
                 Button("CLI 경로 복사") {
                     NSPasteboard.general.clearContents()
@@ -55,7 +60,7 @@ struct AgentIntegrationSection: View {
             }
             if let message { Text(message).font(.callout).textSelection(.enabled).accessibilityLabel(message) }
         }
-        footer: { Text("모델 로그인은 각 에이전트에서 진행합니다. 사용자 범위의 MCP 등록만 추가·제거합니다. 설치 후 에이전트의 새 세션에서 연결을 확인하세요.") }
+        footer: { Text("설치 감지는 CLI·앱 파일만 확인하며 로그인이나 에이전트를 실행하지 않습니다. 미감지 에이전트의 연결 설치는 비활성화합니다. 설치와 MCP 등록·실제 도구 로딩은 별개이며 모델 로그인은 각 에이전트에서 진행합니다.") }
         .sheet(item: $plan) { selected in
             VStack(alignment: .leading, spacing: 16) {
                 Text("\(selected.target.name) 연결 \(selected.removing ? "제거" : "설치")").font(.title2.weight(.semibold))
@@ -78,12 +83,32 @@ struct AgentIntegrationSection: View {
     }
 
     private func prepare(_ target: AgentConnectionTarget, removing: Bool) {
+        if !removing && store.agentInstallations[target]?.canInstallConnection(for: target) != true {
+            message = "에이전트 설치 상태를 확인하세요. Codex·Claude Code·Grok Build 연결 설정에는 CLI가 필요합니다."
+            return
+        }
         busy = true; message = nil
         let helper = helperURL, domain = Bundle.main.bundleIdentifier ?? ManagementConfiguration.releaseDomain
         Task {
             defer { busy = false }
             do { plan = try await installer.prepare(target: target, removing: removing, helperURL: helper, domain: domain) }
             catch { message = error.localizedDescription }
+        }
+    }
+
+    private func statusText(_ target: AgentConnectionTarget) -> String {
+        guard let installation = store.agentInstallations[target] else { return "설치 확인 중…" }
+        let connection = target.requiresCLIForConnection && installation.isInstalled && installation.executableURL == nil
+            ? "연결 CLI 필요" : "MCP " + (statuses[target] ?? "등록 미확인")
+        return installation.label + " · " + connection
+    }
+
+    private func refreshInstallations() {
+        busy = true; message = nil
+        Task {
+            defer { busy = false }
+            await store.refreshAgentInstallations()
+            message = "CLI·앱 파일의 설치 상태를 확인했습니다. 사용자 지정 위치에 설치했다면 기본 검색 경로나 PATH에서 찾을 수 있는지 확인하세요."
         }
     }
 

@@ -149,7 +149,40 @@ struct AppStateCheck {
         try await checkChangeHistory()
         try await checkLinkSwitching()
         try await checkAgentRequests()
+        try await checkAgentInstallations()
         print("PASS: profile create/edit/search/reload/delete, missing members preserved, invalid/corrupt state blocked, filters, fixed default paths, additional path edit/delete/reload, import profiles, reject missing members, preserve imported snapshots, no skill file changes")
+    }
+
+    @MainActor private static func checkAgentInstallations() async throws {
+        func check(_ condition: Bool, _ message: String) {
+            if !condition { fputs("FAIL: " + message + "\n", stderr); exit(1) }
+        }
+        let files = FileManager.default
+        let home = files.temporaryDirectory.appendingPathComponent("ahm-installation-check-" + UUID().uuidString)
+        let suite = "ahm-installation-check." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { try? files.removeItem(at: home); defaults.removePersistentDomain(forName: suite) }
+        let bin = home.appendingPathComponent("bin")
+        let skill = home.appendingPathComponent(".agents/skills/synthetic/SKILL.md")
+        try files.createDirectory(at: bin, withIntermediateDirectories: true)
+        try files.createDirectory(at: skill.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "---\nname: synthetic\ndescription: Installation fixture\n---\nRead only".write(to: skill, atomically: true, encoding: .utf8)
+        let codex = bin.appendingPathComponent("codex")
+        try Data("#!/bin/sh\nexit 99\n".utf8).write(to: codex)
+        try files.setAttributes([.posixPermissions: 0o700], ofItemAtPath: codex.path)
+        let detector = AgentInstallationDetector(executableDirectories: [bin], applicationDirectories: [])
+        let store = AppStore(defaults: defaults, home: home, installationDetector: detector)
+        await store.rescan()
+        check(store.availableAgents.count == 8 && store.sidebarAgents == [.codex], "Only a detected agent belongs in the sidebar")
+        check(store.entries.count == 1 && store.registeredRoots.count == store.automaticRoots.count, "Detection must preserve skill discovery and paths")
+        check(store.addRoot(url: home.appendingPathComponent("manual"), agent: .custom, name: "Manual agent"), "Custom path registration remains available")
+        check(store.sidebarAgents == [.codex, .custom], "Explicitly registered custom agents remain accessible")
+        store.navigate(agent: .codex)
+        try files.removeItem(at: codex)
+        await store.refreshAgentInstallations()
+        check(store.sidebarAgents == [.custom] && store.agentFilter == nil, "Uninstalling the selected agent must clear its stale filter")
+        check(try String(contentsOf: skill, encoding: .utf8) == "---\nname: synthetic\ndescription: Installation fixture\n---\nRead only", "Installation refresh must preserve skill documents")
+        print("PASS: installed-agent sidebar, complete settings/path data, explicit custom agents, uninstall refresh and skill preservation")
     }
 
     @MainActor private static func checkAgentRequests() async throws {

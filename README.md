@@ -18,6 +18,7 @@ A native macOS library for agent skills, built with SwiftUI. Browse skills and t
 - Browse pending and completed changes, search installation paths, and review an inverse plan before undoing a supported completed operation. Both records are retained. Group selections are reconciled from the journal after restart or recovery.
 - Inspect local document/metadata/path findings and save up to 50 review snapshots, with hashes and a current-state comparison. This is a local check, not AI review.
 - Manage paths and system/light/dark appearance in Settings. Removing a registered path does not remove files.
+- Show detected installed agents in the sidebar; keep all eight integrations and their installation state in Settings. Detection checks executable files and supported app bundles without launching agents or reading credentials. Explicitly registered custom agents remain visible, and missing agents do not remove skill data.
 - Connect Codex, Claude Code, Grok Build, Antigravity, OpenCode, Pi, Devin CLI, and Cursor through the bundled CLI/stdio MCP server. Agents can inspect skills and local findings, preview enable/disable changes, and queue requests for human review in the app. Connection installation/removal previews the command or MCP entry and backs up existing configuration. Shared compatibility paths remain one installation and show affected agents.
 - Navigate custom sidebar controls with the keyboard. Accessibility labels identify each agent action and path; agent names and connection states are read together.
 
@@ -70,6 +71,10 @@ Open Settings (`⌘,`) → **에이전트 연동 · CLI / MCP** → **연결 설
 Ask the agent to inspect your skills or prepare enable/disable requests. Open **에이전트 요청** in the app, choose **현재 상태로 검토…**, inspect the regenerated plan, and apply it. Requests expire after 24 hours and are rejected if settings, documents, resources, or relevant history changed. Queuing never applies changes. Group definitions/selections are readable; agent-driven group editing or activation is not yet provided.
 
 The CLI is inside the app at `Contents/Helpers/ahm`; copy its path in Settings. See [CLI and MCP usage](docs/agent-integration.md) for commands, configuration scopes, backups, and limits. This exposes the app as an MCP server; it does not implement a general MCP-server manager.
+
+Installation detection and MCP registration are separate. **설치 상태 확인** refreshes local file detection without running agent commands; **등록 상태 확인** checks saved MCP registration using the existing configuration workflow. Connection installation is disabled when no installation is detected. Codex, Claude Code, and Grok Build require a discovered CLI for registration, even if a desktop app is present. JSON-based registration cleanup remains available without the agent installed.
+
+Detection checks absolute `PATH` entries, common user CLI folders and Homebrew/system binary folders. Codex, Antigravity, OpenCode, and Cursor app bundles are checked in `/Applications` and `~/Applications`; a bundle must have an executable. Unusual locations, renamed apps, and unavailable version-manager commands can be missed. Use Settings to inspect skill paths regardless of installation detection. Detection does not prove login, version compatibility, or live tool availability.
 
 ## Local data and file access
 
