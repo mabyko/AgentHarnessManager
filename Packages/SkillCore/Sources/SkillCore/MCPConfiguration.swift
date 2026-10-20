@@ -127,7 +127,7 @@ struct MCPConfiguration {
 
 /// Anchored no-follow I/O prevents configuration symlinks from escaping the reviewed path.
 enum MCPConfigurationFile {
-    private static func directory(_ url: URL, create: Bool) throws -> Int32? {
+    static func directory(_ url: URL, create: Bool) throws -> Int32? {
         var path = url.standardizedFileURL.path
         for alias in ["/var/", "/tmp/"] where path.hasPrefix(alias) { path = "/private" + path }
         var descriptor = Darwin.open("/", O_RDONLY | O_DIRECTORY)
@@ -147,25 +147,25 @@ enum MCPConfigurationFile {
         } catch { close(descriptor); throw error }
     }
 
-    private static func read(_ name: String, directory: Int32) throws -> Data? {
+    private static func read(_ name: String, directory: Int32, limit: Int = 8_388_608) throws -> Data? {
         let descriptor = openat(directory, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
         if descriptor < 0 && errno == ENOENT { return nil }
         guard descriptor >= 0 else { throw AgentConnectionError.invalidConfiguration }
         let file = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         defer { try? file.close() }
         var info = stat()
-        guard fstat(descriptor, &info) == 0, info.st_mode & S_IFMT == S_IFREG, info.st_size >= 0, info.st_size <= 8_388_608,
-              let data = try file.read(upToCount: 8_388_609), data.count == info.st_size else { throw AgentConnectionError.invalidConfiguration }
+        guard fstat(descriptor, &info) == 0, info.st_mode & S_IFMT == S_IFREG, info.st_size >= 0, info.st_size <= limit,
+              let data = try file.read(upToCount: limit + 1), data.count == info.st_size else { throw AgentConnectionError.invalidConfiguration }
         return data
     }
 
-    static func read(_ url: URL) throws -> Data? {
+    static func read(_ url: URL, limit: Int = 8_388_608) throws -> Data? {
         guard let descriptor = try directory(url.deletingLastPathComponent(), create: false) else { return nil }
         defer { close(descriptor) }
-        return try read(url.lastPathComponent, directory: descriptor)
+        return try read(url.lastPathComponent, directory: descriptor, limit: limit)
     }
 
-    static func write(_ data: Data, to url: URL, replacing original: Data?) throws {
+    static func write(_ data: Data, to url: URL, replacing original: Data?, permissions: mode_t = 0o600) throws {
         guard let descriptor = try directory(url.deletingLastPathComponent(), create: true) else { throw AgentConnectionError.invalidConfiguration }
         defer { close(descriptor) }
         let temporary = ".ahm-mcp-" + UUID().uuidString
@@ -174,7 +174,7 @@ enum MCPConfigurationFile {
         defer { close(file); unlinkat(descriptor, temporary, 0) }
         let handle = FileHandle(fileDescriptor: file, closeOnDealloc: false)
         try handle.write(contentsOf: data)
-        guard fsync(file) == 0 else { throw AgentConnectionError.commandFailed }
+        guard fchmod(file, permissions & 0o777) == 0, fsync(file) == 0 else { throw AgentConnectionError.commandFailed }
         guard try read(url.lastPathComponent, directory: descriptor) == original else { throw AgentConnectionError.changed }
         guard renameatx_np(descriptor, temporary, descriptor, url.lastPathComponent, original == nil ? UInt32(RENAME_EXCL) : 0) == 0,
               fsync(descriptor) == 0 else { throw AgentConnectionError.commandFailed }
