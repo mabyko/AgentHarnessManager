@@ -114,6 +114,10 @@ struct LibrarySkillDetail: View {
                     .help(readOnlyReason(item) ?? (item.isSymbolicLink ? "원본을 유지하고 이 설치 링크만 전환합니다." : "이 설치 폴더를 전환합니다."))
             }.font(.callout.weight(.medium))
             Text(item.currentPath).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+            if store.agents(for: item.location).count > 1 {
+                Text("호환 에이전트: " + store.agents(for: item.location).map(\.displayName).joined(separator: ", ") + " · 이 위치를 전환하면 함께 영향을 받습니다.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if !item.isEnabled { Text("복원 위치: " + item.originalPath).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
             if let target = item.resolvedPath {
                 Text((item.disabledRecord?.link == nil ? "공유 원본: " : "원래 위치 기준 원본: ") + target).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
@@ -305,11 +309,16 @@ private struct GroupSelectionSummary: View {
 
 private struct MutationMoveCard: View {
     let move: Move
+    @Environment(AppStore.self) private var store
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(move.installation.name + " · " + (move.enabled ? "원래 위치로 복원" : "발견 경로 밖에 보관"),
                   systemImage: move.enabled ? "arrow.uturn.backward" : "archivebox").font(.callout.weight(.medium))
             Text(move.installation.location.label).font(.caption).foregroundStyle(.secondary)
+            if store.agents(for: move.installation.location).count > 1 {
+                Text("공유 경로 영향: " + store.agents(for: move.installation.location).map(\.displayName).joined(separator: ", "))
+                    .font(.caption).foregroundStyle(WorkbenchTheme.warning)
+            }
             if let link = move.installation.link {
                 Label("설치 링크만 이동 · 공유 원본 유지", systemImage: "link").font(.caption)
                 Text("원본: " + link.targetPath + "\n링크 문자: " + link.text)

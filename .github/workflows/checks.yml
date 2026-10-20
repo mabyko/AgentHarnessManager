@@ -25,6 +25,8 @@ jobs:
         run: swift test --package-path Packages/SkillCore
       - name: App-state checks
         run: scripts/check-app-state.sh
+      - name: Management CLI and MCP checks
+        run: scripts/check-management.sh
       - name: Design and documentation checks
         run: node scripts/check-design.mjs
       - name: Release build

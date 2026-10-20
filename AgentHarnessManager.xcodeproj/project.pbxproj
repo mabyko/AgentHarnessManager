@@ -10,21 +10,31 @@
 		046617C0EC5F7355D5EE8EB7 /* AgentHarnessManagerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4648E22346D3B60C07F64EC3 /* AgentHarnessManagerApp.swift */; };
 		0D3A214EF647234E69DA8D6D /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1D5E45C77CB6EC8544751B1 /* SettingsView.swift */; };
 		23889C273FA9B998C334772F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA8BD84EF934F28CA5DDC8D5 /* Assets.xcassets */; };
+		73725A8009D6F9D4409ABF3B /* AgentIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45A776EA1C2466FE18A1FB19 /* AgentIcon.swift */; };
 		80B16C3C1E52DD816BB26758 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EB2B5BADF93056410B09D53 /* ContentView.swift */; };
 		96F26E379EEE5612F292F8BF /* SkillCore in Frameworks */ = {isa = PBXBuildFile; productRef = B3D2D69B148ED192386C912A /* SkillCore */; };
 		A3874B258F4FE2E3CBDF3B86 /* SourceEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54AFE311CF9FC0A9CFEA80B5 /* SourceEditorSheet.swift */; };
 		A4001A28DE8EDDAA2F58E45C /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85D6987CB8D185A48C342191 /* Theme.swift */; };
+		B2CAA77E01E45AE204B7CA53 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = 0FE67F8C66E39A3F8819C93E /* LICENSE */; };
+		BB99130946B955D6D63978F4 /* AgentRequestDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 688F92095076CA4A69BFA4FC /* AgentRequestDetail.swift */; };
 		C23F2A1115C31BBDE4659A6C /* GroupEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC0D50375D9F50B321F8DFD /* GroupEditor.swift */; };
 		C6F297AFB8EC851BABFFFC55 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03E13032B28754ABABDA1E18 /* AppStore.swift */; };
+		E5698F3761944070E638246E /* AgentIntegrationSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BAD2339CC08643716C935CE /* AgentIntegrationSection.swift */; };
 		E846BE31F80AF00C1204611B /* LibrarySidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89FEB34E5FCBAC4B241D1BFD /* LibrarySidebar.swift */; };
 		F4B69888ECB33B2D89C1CCF7 /* LibraryDetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4DBA3B58FF703DDA1DE4A2F /* LibraryDetailViews.swift */; };
 		F945E18ACA2048183A287BC8 /* ProfilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C8B4FEA5790C59DF2741BA2 /* ProfilesView.swift */; };
+		FA3181441CB36C221F08F55C /* THIRD_PARTY_NOTICES.md in Resources */ = {isa = PBXBuildFile; fileRef = 16DB7EE7102D19006B2A4684 /* THIRD_PARTY_NOTICES.md */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		03E13032B28754ABABDA1E18 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
+		0FE67F8C66E39A3F8819C93E /* LICENSE */ = {isa = PBXFileReference; path = LICENSE; sourceTree = "<group>"; };
+		16DB7EE7102D19006B2A4684 /* THIRD_PARTY_NOTICES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = THIRD_PARTY_NOTICES.md; sourceTree = "<group>"; };
+		2BAD2339CC08643716C935CE /* AgentIntegrationSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIntegrationSection.swift; sourceTree = "<group>"; };
+		45A776EA1C2466FE18A1FB19 /* AgentIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentIcon.swift; sourceTree = "<group>"; };
 		4648E22346D3B60C07F64EC3 /* AgentHarnessManagerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentHarnessManagerApp.swift; sourceTree = "<group>"; };
 		54AFE311CF9FC0A9CFEA80B5 /* SourceEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceEditorSheet.swift; sourceTree = "<group>"; };
+		688F92095076CA4A69BFA4FC /* AgentRequestDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRequestDetail.swift; sourceTree = "<group>"; };
 		6C8B4FEA5790C59DF2741BA2 /* ProfilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesView.swift; sourceTree = "<group>"; };
 		6F1B2205F75CDD9CC95C42D9 /* SkillCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SkillCore; path = Packages/SkillCore; sourceTree = SOURCE_ROOT; };
 		731707B3564DB9FE8C16896E /* AgentHarnessManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentHarnessManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -54,6 +64,9 @@
 			isa = PBXGroup;
 			children = (
 				4648E22346D3B60C07F64EC3 /* AgentHarnessManagerApp.swift */,
+				45A776EA1C2466FE18A1FB19 /* AgentIcon.swift */,
+				2BAD2339CC08643716C935CE /* AgentIntegrationSection.swift */,
+				688F92095076CA4A69BFA4FC /* AgentRequestDetail.swift */,
 				03E13032B28754ABABDA1E18 /* AppStore.swift */,
 				AA8BD84EF934F28CA5DDC8D5 /* Assets.xcassets */,
 				9EB2B5BADF93056410B09D53 /* ContentView.swift */,
@@ -87,6 +100,8 @@
 		CACE88D44F6BE7F337F3D14D = {
 			isa = PBXGroup;
 			children = (
+				0FE67F8C66E39A3F8819C93E /* LICENSE */,
+				16DB7EE7102D19006B2A4684 /* THIRD_PARTY_NOTICES.md */,
 				0E0B85C3FD365BC84B2A3C8B /* AgentHarnessManager */,
 				DBE6D07281DF35DA3202A520 /* Config */,
 				4E02E43E2E4F2A95D44D6503 /* Packages */,
@@ -110,6 +125,7 @@
 			buildConfigurationList = 745D81AF09A0A0F87FC883B2 /* Build configuration list for PBXNativeTarget "AgentHarnessManager" */;
 			buildPhases = (
 				1069F553767CCF90119DD760 /* Sources */,
+				CC79C19EC2545E2AC5C593C9 /* Embed management CLI */,
 				840FE88341CDD58B082EC98B /* Resources */,
 				687398F5AFDD9F5E998F6543 /* Frameworks */,
 			);
@@ -167,10 +183,34 @@
 			buildActionMask = 2147483647;
 			files = (
 				23889C273FA9B998C334772F /* Assets.xcassets in Resources */,
+				B2CAA77E01E45AE204B7CA53 /* LICENSE in Resources */,
+				FA3181441CB36C221F08F55C /* THIRD_PARTY_NOTICES.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		CC79C19EC2545E2AC5C593C9 /* Embed management CLI */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed management CLI";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "#!/bin/sh\nset -eu\ncli_scratch=\"$DERIVED_FILE_DIR/AgentHarnessCLI\"\nset --\nfor cli_arch in $ARCHS; do\n    set -- \"$@\" --arch \"$cli_arch\"\ndone\nswift build --package-path \"$SRCROOT/Packages/SkillCore\" --scratch-path \"$cli_scratch\" \\\n    --configuration release --product ahm \"$@\"\ncli_bin=$(swift build --package-path \"$SRCROOT/Packages/SkillCore\" --scratch-path \"$cli_scratch\" \\\n    --configuration release --show-bin-path \"$@\")\ncli_destination=\"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers/ahm\"\nmkdir -p \"$(dirname \"$cli_destination\")\"\nditto \"$cli_bin/ahm\" \"$cli_destination\"\nchmod 755 \"$cli_destination\"\nif [ \"${CODE_SIGNING_ALLOWED:-NO}\" != \"NO\" ]; then\n    codesign --force --options runtime --sign \"${EXPANDED_CODE_SIGN_IDENTITY:--}\" \"$cli_destination\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		1069F553767CCF90119DD760 /* Sources */ = {
@@ -178,6 +218,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				046617C0EC5F7355D5EE8EB7 /* AgentHarnessManagerApp.swift in Sources */,
+				73725A8009D6F9D4409ABF3B /* AgentIcon.swift in Sources */,
+				E5698F3761944070E638246E /* AgentIntegrationSection.swift in Sources */,
+				BB99130946B955D6D63978F4 /* AgentRequestDetail.swift in Sources */,
 				C6F297AFB8EC851BABFFFC55 /* AppStore.swift in Sources */,
 				80B16C3C1E52DD816BB26758 /* ContentView.swift in Sources */,
 				C23F2A1115C31BBDE4659A6C /* GroupEditor.swift in Sources */,
@@ -200,7 +243,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 19;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -289,7 +332,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 19;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;

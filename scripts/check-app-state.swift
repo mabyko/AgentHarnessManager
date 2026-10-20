@@ -12,6 +12,7 @@ struct AppStateCheck {
             try? files.removeItem(at: home)
             defaults.removePersistentDomain(forName: suite)
         }
+        try files.createDirectory(at: home.appendingPathComponent(".grok/skills"), withIntermediateDirectories: true)
         let body = "---\nname: check\ndescription: Temporary check\n---\nRead only\n"
         for path in [".agents/skills/codex-check", ".claude/skills/claude-check", "manual/custom-check", "replacement/replacement-check"] {
             let directory = home.appendingPathComponent(path)
@@ -21,6 +22,16 @@ struct AppStateCheck {
         let store = AppStore(defaults: defaults, home: home)
         await store.rescan()
         precondition(store.page == .library && store.entries.count == 2)
+        store.agentFilter = .opencode
+        precondition(store.filteredEntries.count == 2 && store.filteredSkills.count == 2)
+        store.rootFilterID = store.automaticRoots[0].id
+        precondition(store.agentFilter == .opencode && store.filteredEntries.count == 1)
+        store.agentFilter = .cursor
+        precondition(store.rootFilterID == store.automaticRoots[0].id && store.filteredSkills.count == 1)
+        store.agentFilter = .antigravity
+        precondition(store.rootFilterID == nil && store.filteredEntries.isEmpty)
+        store.resetFilters()
+        precondition(store.entries.count == 2 && store.availableAgents.count == 8)
         let profileID = UUID()
         let members = Set(store.entries.map(\.id))
         precondition(store.saveProfile(id: profileID, name: "  Writing  ", note: "Daily work", memberIDs: members))
@@ -101,7 +112,7 @@ struct AppStateCheck {
         let preserved = try String(contentsOf: manual.appendingPathComponent("custom-check/SKILL.md"), encoding: .utf8)
         precondition(preserved == body)
         await restored.removeRoot(restored.automaticRoots[0])
-        precondition(restored.registeredRoots.count == 2)
+        precondition(restored.registeredRoots.count == restored.automaticRoots.count)
         let missing = home.appendingPathComponent("missing")
         precondition(restored.addRoot(url: missing, agent: .custom, name: "Missing Agent"))
         await restored.rescan()
@@ -137,7 +148,44 @@ struct AppStateCheck {
         try await checkLibrary()
         try await checkChangeHistory()
         try await checkLinkSwitching()
+        try await checkAgentRequests()
         print("PASS: profile create/edit/search/reload/delete, missing members preserved, invalid/corrupt state blocked, filters, fixed default paths, additional path edit/delete/reload, import profiles, reject missing members, preserve imported snapshots, no skill file changes")
+    }
+
+    @MainActor private static func checkAgentRequests() async throws {
+        let files = FileManager.default, domain = "ahm-request-check-" + UUID().uuidString
+        let home = files.temporaryDirectory.appendingPathComponent(domain).resolvingSymlinksInPath()
+        let defaults = UserDefaults(suiteName: domain)!
+        defer { defaults.removePersistentDomain(forName: domain); try? files.removeItem(at: home) }
+        let document = home.appendingPathComponent(".agents/skills/example/SKILL.md")
+        try files.createDirectory(at: document.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "---\nname: example\ndescription: Request check\n---\nHello".write(to: document, atomically: true, encoding: .utf8)
+        let store = AppStore(defaults: defaults, home: home)
+        await store.rescan()
+        let bundleID = Bundle.main.bundleIdentifier ?? "AgentHarnessManager"
+        let config = try ManagementConfiguration(home: home, domain: bundleID,
+            preferencesData: JSONEncoder().encode(store.preferences), rootsData: nil)
+        let snapshot = try await ManagementService.snapshot(configuration: config)
+        let ids = snapshot.installations.map(\.id)
+        let plan = try snapshot.plan(installationIDs: ids, enabled: false, title: "Agent request")
+        let request = AgentChangeRequest(snapshot: snapshot, plan: plan, installationIDs: ids, enabled: false)
+        try await AgentRequestStore(stateDirectory: config.stateDirectory).submit(request)
+        await store.refreshAgentRequests()
+        precondition(store.agentRequests.map(\.id) == [request.id] && store.mutationPreview == nil)
+        precondition(files.fileExists(atPath: document.path), "Queueing must not change skills")
+        await store.prepareAgentRequest(request)
+        precondition(store.mutationPreview?.id == request.id)
+        store.cancelPreview()
+        precondition(files.fileExists(atPath: document.path), "Cancel must not change skills")
+        await store.prepareAgentRequest(request)
+        await store.applyPreview()
+        precondition(store.agentRequestState(request) == "적용 완료" && store.journal.completed.first?.id == request.id)
+        precondition(!files.fileExists(atPath: document.path))
+        await store.prepareAgentRequest(request)
+        precondition(store.mutationPreview == nil, "Completed requests cannot be replayed")
+        await store.dismissAgentRequest(request)
+        precondition(store.agentRequests.isEmpty && store.journal.completed.count == 1)
+        print("PASS: agent request queue, rebuilt app preview, cancel, explicit apply, journal correlation and replay rejection; isolated files/settings only")
     }
 
     @MainActor private static func checkSources() async throws {
@@ -186,7 +234,7 @@ struct AppStateCheck {
         precondition(store.agentFilter == .claudeCode && store.availableRoots.count == 1)
         store.rootFilterID = claudeRoot.id
         store.agentFilter = nil
-        precondition(store.rootFilterID == nil && store.availableRoots.count == 3)
+        precondition(store.rootFilterID == nil && store.availableRoots.count == store.automaticRoots.count + 1)
         store.rootFilterID = codexRoot.id
         store.agentFilter = .codex
         precondition(store.rootFilterID == codexRoot.id, "Compatible locations stay selected")

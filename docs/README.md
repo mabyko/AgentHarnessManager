@@ -6,8 +6,11 @@ Start with the [English README](../README.md) or [한국어 README](../README.ko
 
 Most detailed notes are currently in Korean. They include proposed behavior beyond the running app: broader file changes/recovery, extended source classification, AI review, plugin management, and other planned features. Treat the READMEs and source code as the description of current support, and check each document's implementation-status notes before relying on a design contract.
 
+[CLI review authentication research](cli-review-auth-research.md) records the 2026-10-20 Codex/Claude Code policy, authentication, and process-isolation findings. Local CLI review is a proposal, not an implemented feature.
+
 | Document | Purpose |
 | --- | --- |
+| [Agent CLI / MCP](agent-integration.md) | Management commands, agent connection setup, reviewed requests, backups, and limits |
 | [Architecture](architecture.md) | Current library, group, local review, limited file-change/recovery support, and broader proposed contracts |
 | [Product scenarios](product-scenarios.md) | User flows, scope, failure handling, and acceptance criteria |
 | [Glossary](../GLOSSARY.md) | Plugins, skills, sources, work configurations, and planned file states |
@@ -26,7 +29,7 @@ Older screenshots are historical records, not current product screenshots. See [
 
 ## Before publishing
 
-- Add the selected project license.
+- Keep the MIT license notice in source and binary distributions; review third-party notices separately.
 - Review the history being published as well as the current files, especially older reference images, screenshots, personal paths, and credentials. Keep `Config/Local.xcconfig` and signing material out of Git.
 - Enable private vulnerability reporting in the public repository's security settings and confirm the reporting path in `SECURITY.md`.
 - Confirm GitHub Actions passes after upload. Local checks alone do not verify the hosted workflow.

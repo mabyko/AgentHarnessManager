@@ -35,17 +35,18 @@ Run these from the repository root:
 ```sh
 swift test --package-path Packages/SkillCore
 scripts/check-app-state.sh
+scripts/check-management.sh
 node scripts/check-design.mjs
 xcodebuild -project AgentHarnessManager.xcodeproj \
   -scheme AgentHarnessManager -configuration Release \
   -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
 ```
 
-Node.js 22+ is needed for the design check; no npm dependencies are required. Core tests use temporary folders, and the app-state check uses a temporary home and isolated preferences. They do not modify your installed skills or saved app settings.
+Node.js 22+ is needed for the design check and Python 3 for CLI/MCP checks; no npm dependencies are required. Core tests use temporary folders, and the app-state check uses a temporary home and isolated preferences. They do not modify your installed skills or saved app settings.
 
 The GitHub Actions workflow is configured to run these checks on pull requests and pushes to `main`. It uses the [macOS 26 runner image](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md) and a pinned [checkout action](https://github.com/actions/checkout).
 
-For UI changes, also inspect the native app in light and dark mode and verify keyboard access to the affected controls. Prototype checks do not validate native UI behavior or filesystem writes.
+For UI changes, also inspect the native app in light and dark mode and verify keyboard access to the affected controls. Run `scripts/check-settings.sh` from a logged-in macOS desktop to check actual settings-category clicks, General, all eight connection rows, and the native skill-path agent picker. It uses synthetic paths and refreshes the native settings screenshots; it is separate from headless CI. Prototype checks do not validate native UI behavior or filesystem writes.
 
 ## Pull requests
 

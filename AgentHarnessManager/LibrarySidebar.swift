@@ -33,8 +33,9 @@ struct LibrarySidebar: View {
                     VStack(alignment: .leading, spacing: 4) {
                         sectionTitle("에이전트")
                         ForEach(store.availableAgents, id: \.self) { agent in
-                            row(agent.displayName, symbol: "terminal", count: store.skills.filter { $0.installations.contains { $0.location.agent == agent } }.count,
-                                selected: store.page == .library && store.agentFilter == agent) { store.navigate(agent: agent) }
+                            row(agent.displayName, count: store.skills.filter { $0.installations.contains { store.agents(for: $0.location).contains(agent) } }.count,
+                                selected: store.page == .library && store.agentFilter == agent,
+                                action: { store.navigate(agent: agent) }) { AgentIcon(agent: agent) }
                         }
                     }
                     VStack(alignment: .leading, spacing: 4) {
@@ -55,6 +56,7 @@ struct LibrarySidebar: View {
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         sectionTitle("파일 변경")
+                        row("에이전트 요청", symbol: "tray.and.arrow.down", count: store.agentRequests.count, selected: store.page == .requests) { store.page = .requests }
                         row("변경 이력", symbol: "arrow.left.arrow.right", count: store.mutations.count, selected: store.page == .changes) { store.page = .changes }
                     }
                     if !store.profiles.isEmpty || store.profilesLoadFailed {
@@ -77,9 +79,13 @@ struct LibrarySidebar: View {
         Text(title).font(.caption.weight(.semibold)).foregroundStyle(WorkbenchTheme.sidebarSecondary).padding(.bottom, 6)
     }
     private func row(_ title: String, symbol: String, count: Int, selected: Bool, action: @escaping () -> Void) -> some View {
+        row(title, count: count, selected: selected, action: action) { Image(systemName: symbol) }
+    }
+    private func row<Icon: View>(_ title: String, count: Int, selected: Bool, action: @escaping () -> Void,
+                                 @ViewBuilder icon: () -> Icon) -> some View {
         Button(action: action) {
             HStack(spacing: 9) {
-                Image(systemName: symbol).frame(width: 18)
+                icon().frame(width: 18)
                 Text(title).lineLimit(1)
                 Spacer(minLength: 4)
                 Text("\(count)").font(.caption).monospacedDigit()

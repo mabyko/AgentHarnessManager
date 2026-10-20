@@ -20,9 +20,18 @@ targets:
   AgentHarnessManager:
     type: application
     platform: macOS
-    sources: AgentHarnessManager
+    sources:
+      - path: AgentHarnessManager
+      - path: LICENSE
+        buildPhase: resources
+      - path: THIRD_PARTY_NOTICES.md
+        buildPhase: resources
     dependencies:
       - package: SkillCore
+    postCompileScripts:
+      - path: scripts/embed-cli.sh
+        name: Embed management CLI
+        basedOnDependencyAnalysis: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(AGENT_SKILL_MANAGER_BUNDLE_ID)
@@ -36,7 +45,7 @@ targets:
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: YES
         MARKETING_VERSION: "0.1.0"
-        CURRENT_PROJECT_VERSION: "11"
+        CURRENT_PROJECT_VERSION: "19"
       configs:
         Debug:
           ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon-Dev

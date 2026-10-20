@@ -4,7 +4,7 @@ import Foundation
 import SkillCore
 
 enum AppPage: String, CaseIterable, Identifiable {
-    case library, findings, groups, history, changes, profiles
+    case library, findings, groups, history, changes, requests, profiles
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -14,6 +14,7 @@ enum AppPage: String, CaseIterable, Identifiable {
         case .groups: "그룹"
         case .history: "검사 이력"
         case .changes: "변경 이력"
+        case .requests: "에이전트 요청"
         }
     }
     var symbol: String {
@@ -24,6 +25,7 @@ enum AppPage: String, CaseIterable, Identifiable {
         case .groups: "folder"
         case .history: "clock.arrow.circlepath"
         case .changes: "arrow.left.arrow.right"
+        case .requests: "tray.and.arrow.down"
         }
     }
 }
@@ -75,14 +77,18 @@ final class AppStore {
     private(set) var groupSyncFailed = false
     private(set) var isMutating = false
     private(set) var isPreparingChange = false
+    private(set) var agentRequests: [AgentChangeRequest] = []
+    private(set) var agentRequestsMessage: String?
+    var selectedAgentRequestID: UUID?
+    @ObservationIgnored private let agentRequestStore: AgentRequestStore
     @ObservationIgnored private let libraryService: LibraryService
-    private static let preferencesKey = "libraryPreferences.v1"
+    private static let preferencesKey = ManagementConfiguration.preferencesKey
     private static let reviewsKey = "review-history.v1"
     var search = ""
     var agentFilter: SkillAgent? {
         didSet {
-            if let rootID = rootFilterID,
-               registeredRoots.first(where: { $0.id == rootID })?.agent != agentFilter {
+            if let rootID = rootFilterID, let root = registeredRoots.first(where: { $0.id == rootID }),
+               agentFilter == nil || !agents(for: root).contains(agentFilter!) {
                 rootFilterID = nil
             }
         }
@@ -92,7 +98,7 @@ final class AppStore {
         didSet {
             if let rootID = rootFilterID {
                 if let root = registeredRoots.first(where: { $0.id == rootID }) {
-                    agentFilter = root.agent
+                    if agentFilter == nil || !agents(for: root).contains(agentFilter!) { agentFilter = root.agent }
                 } else { rootFilterID = nil }
             }
         }
@@ -119,7 +125,7 @@ final class AppStore {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var scanGeneration = 0
     private static let sourcesKey = "skillSources"
-    private static let rootsKey = "additionalSkillRoots"
+    private static let rootsKey = ManagementConfiguration.rootsKey
     // ponytail: UserDefaults stores metadata only; join the journal-backed state before enabling file changes.
     private static let profilesKey = "workProfiles"
 
@@ -128,18 +134,13 @@ final class AppStore {
         self.home = home
         libraryService = LibraryService(stateDirectory: home.resolvingSymlinksInPath()
             .appendingPathComponent("Library/Application Support/" + (Bundle.main.bundleIdentifier ?? "AgentHarnessManager") + "/Library"))
-        automaticRoots = [
-            DiscoveryRoot(agent: .codex, url: home.appendingPathComponent(".agents/skills"), label: "Codex · 사용자 스킬"),
-            DiscoveryRoot(agent: .claudeCode, url: home.appendingPathComponent(".claude/skills"), label: "Claude Code · 사용자 스킬")
-        ]
+        agentRequestStore = AgentRequestStore(stateDirectory: home.resolvingSymlinksInPath()
+            .appendingPathComponent("Library/Application Support/" + (Bundle.main.bundleIdentifier ?? "AgentHarnessManager")))
+        automaticRoots = ManagementConfiguration.defaultRoots(home: home)
         registeredRoots = automaticRoots
         if let data = defaults.data(forKey: Self.preferencesKey) {
             do {
-                let loaded = try JSONDecoder().decode(AppPreferences.self, from: data)
-                guard loaded.version == 1, Set(loaded.groups.map(\.id)).count == loaded.groups.count,
-                      loaded.groups.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
-                      loaded.activeGroupIDs.isSubset(of: Set(loaded.groups.map(\.id))) else { throw CocoaError(.coderReadCorrupt) }
-                preferences = loaded
+                preferences = try ManagementConfiguration.decodePreferences(data)
             } catch { preferencesLoadFailed = true; libraryMessage = "그룹·즐겨찾기 설정이 손상되었습니다. 기존 데이터를 보존하고 저장을 잠갔습니다." }
         }
         if let data = defaults.data(forKey: Self.reviewsKey) {
@@ -151,10 +152,7 @@ final class AppStore {
         }
         if let saved = defaults.data(forKey: Self.rootsKey) {
             do {
-                let additional = try JSONDecoder().decode([DiscoveryRoot].self, from: saved)
-                for root in additional where root.url.isFileURL && root.url.path.hasPrefix("/") {
-                    if !registeredRoots.contains(where: { $0.id == root.id }) { registeredRoots.append(root) }
-                }
+                registeredRoots = try ManagementConfiguration.decodeRoots(saved, home: home)
             } catch { settingsMessage = "추가 경로 설정을 읽을 수 없습니다. 경로를 다시 등록해 주세요." }
         }
         if let saved = defaults.data(forKey: Self.sourcesKey) {
@@ -234,12 +232,16 @@ final class AppStore {
             return true
         } catch { sourceMessage = "출처를 저장할 수 없습니다. 입력한 주소는 창에 남아 있습니다."; return false }
     }
-    var availableAgents: [SkillAgent] { SkillAgent.allCases.filter { agent in registeredRoots.contains { $0.agent == agent } } }
-    var availableRoots: [DiscoveryRoot] { registeredRoots.filter { agentFilter == nil || $0.agent == agentFilter } }
+    func agents(for root: DiscoveryRoot) -> [SkillAgent] { ManagementConfiguration.readers(of: root, defaultRoots: automaticRoots) }
+    func agents(for entry: SkillEntry) -> [SkillAgent] {
+        registeredRoots.first { $0.id == entry.rootID }.map { agents(for: $0) } ?? [entry.agent]
+    }
+    var availableAgents: [SkillAgent] { SkillAgent.allCases.filter { agent in registeredRoots.contains { agents(for: $0).contains(agent) } } }
+    var availableRoots: [DiscoveryRoot] { registeredRoots.filter { agentFilter == nil || agents(for: $0).contains(agentFilter!) } }
     var hasFilters: Bool { !search.isEmpty || agentFilter != nil || linksOnly || rootFilterID != nil }
     var filteredEntries: [SkillEntry] {
         scopeEntries.filter {
-            (agentFilter == nil || $0.agent == agentFilter)
+            (agentFilter == nil || agents(for: $0).contains(agentFilter!))
             && (!linksOnly || $0.isSymbolicLink)
             && (page != .findings || $0.problem != nil)
             && matchesSearch("\($0.name) \($0.url.path) \(agentName(for: $0)) \(sourceRepository(for: $0)?.name ?? "출처 미확인")")
@@ -254,7 +256,7 @@ final class AppStore {
     var filteredProblemRoots: [RootObservation] {
         problemRoots.filter {
             (rootFilterID == nil || $0.root.id == rootFilterID)
-            && (agentFilter == nil || $0.root.agent == agentFilter)
+            && (agentFilter == nil || agents(for: $0.root).contains(agentFilter!))
             && matchesSearch("\($0.root.label) \($0.root.url.path) \($0.message ?? "")")
         }
     }
@@ -369,6 +371,7 @@ final class AppStore {
         lastScanned = .now
         hasScanned = true
         isScanning = false
+        await refreshAgentRequests()
     }
 
     func chooseSkillFolder(agent: SkillAgent, name: String, replacing existing: DiscoveryRoot? = nil) async {
@@ -488,7 +491,7 @@ extension AppStore {
             matchesFilter(skill, libraryFilter)
             && (groupFilterID == nil || groups.first(where: { $0.id == groupFilterID })?.skillIDs.contains(skill.id) == true)
             && skill.installations.contains { item in
-                (agentFilter == nil || item.location.agent == agentFilter)
+                (agentFilter == nil || agents(for: item.location).contains(agentFilter!))
                 && (rootFilterID == nil || item.location.id == rootFilterID)
                 && (!linksOnly || item.isSymbolicLink)
                 && (sourceFilterID == nil || (sourceRepository(for: item)?.id ?? Self.unknownSourceID) == sourceFilterID)
@@ -677,6 +680,44 @@ extension AppStore {
         await rescan()
     }
     func cancelPreview() { mutationPreview = nil }
+
+    var selectedAgentRequest: AgentChangeRequest? { agentRequests.first { $0.id == selectedAgentRequestID } }
+    var filteredAgentRequests: [AgentChangeRequest] { agentRequests.filter { matchesSearch($0.title + " " + $0.id.uuidString) } }
+
+    func agentRequestState(_ request: AgentChangeRequest) -> String {
+        if journal.pending?.id == request.id { return "복구 필요" }
+        if journal.completed.contains(where: { $0.id == request.id }) { return "적용 완료" }
+        if Date().timeIntervalSince(request.createdAt) > 86_400 { return "만료됨" }
+        return "검토 대기"
+    }
+
+    func refreshAgentRequests() async {
+        do { agentRequests = try await agentRequestStore.list(); agentRequestsMessage = nil }
+        catch { agentRequestsMessage = "에이전트 요청을 읽을 수 없습니다. 기존 요청은 보존했습니다. " + error.localizedDescription }
+    }
+
+    func prepareAgentRequest(_ request: AgentChangeRequest) async {
+        guard metadataIsEditable, canChangeFiles, mutationPreview == nil,
+              !journal.completed.contains(where: { $0.id == request.id }) else {
+            libraryMessage = "진행 중인 검토·복구를 마친 뒤 새 요청을 검토할 수 있습니다."; return
+        }
+        await rescan()
+        guard metadataIsEditable, canChangeFiles, mutationPreview == nil, !preferencesLoadFailed else { return }
+        do {
+            let configuration = try ManagementConfiguration(home: home, domain: Bundle.main.bundleIdentifier ?? "AgentHarnessManager",
+                preferencesData: JSONEncoder().encode(preferences), rootsData: JSONEncoder().encode(additionalRoots))
+            let snapshot = ManagementSnapshot(configuration: configuration, journal: journal, skills: skills, observations: roots)
+            let plan = try request.validatedPlan(snapshot: snapshot)
+            guard !plan.installations.isEmpty else { libraryMessage = "이미 요청한 상태입니다."; return }
+            mutationPreview = plan; libraryMessage = nil
+        } catch { libraryMessage = error.localizedDescription }
+    }
+
+    func dismissAgentRequest(_ request: AgentChangeRequest) async {
+        guard mutationPreview == nil, !isMutating, !isPreparingChange, journal.pending?.id != request.id else { return }
+        do { try await agentRequestStore.remove(request.id); await refreshAgentRequests() }
+        catch { agentRequestsMessage = error.localizedDescription }
+    }
     func undoUnavailableReason(for plan: MutationPlan) -> String? {
         if let reason = journal.undoUnavailableReason(for: plan.id) { return reason }
         if let selection = plan.groupSelection {

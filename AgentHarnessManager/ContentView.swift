@@ -22,6 +22,7 @@ struct ContentView: View {
                 case .findings: findingList
                 case .history: historyList
                 case .changes: mutationList
+                case .requests: agentRequestList
                 case .profiles:
                     ContentUnavailableView("이전 작업 구성", systemImage: "archivebox", description: Text("기존 데이터와 메모를 오른쪽에서 확인하세요. 그룹으로 가져온 뒤에도 원본은 보존됩니다."))
                 }
@@ -54,6 +55,9 @@ struct ContentView: View {
                 case .changes:
                     if let plan = store.selectedMutation { MutationDetail(plan: plan) }
                     else { selectionPrompt("변경 이력을 선택하세요", symbol: "arrow.left.arrow.right", description: "완료·중단된 작업의 이동 경로를 확인하고, 되돌릴 작업을 검토할 수 있습니다.") }
+                case .requests:
+                    if let request = store.selectedAgentRequest { AgentRequestDetail(request: request) }
+                    else { selectionPrompt("에이전트 요청을 선택하세요", symbol: "tray.and.arrow.down", description: "CLI·MCP에서 보낸 요청을 확인하세요. 검토·적용 전에는 스킬 파일을 변경하지 않습니다.") }
                 case .profiles: ProfilesView()
                 }
             }
@@ -74,13 +78,16 @@ struct ContentView: View {
             }
             ToolbarItem { Button { openSettings() } label: { Label("설정", systemImage: "gearshape") } }
         }
-        .searchable(text: $store.search, placement: .toolbar, prompt: "이름, 설명 또는 경로 검색")
+        .searchable(text: $store.search, placement: .toolbar, prompt: store.page == .requests ? "요청 제목 또는 ID 검색" : "이름, 설명 또는 경로 검색")
         .onChange(of: [store.search, store.agentFilter?.rawValue ?? "", store.rootFilterID ?? "", store.sourceFilterID ?? "", String(store.linksOnly)]) { _, _ in
             if let id = store.selectedSkillID, !store.filteredSkills.contains(where: { $0.id == id }) { store.selectedSkillID = nil }
         }
         .sheet(item: $groupEditor) { GroupEditor(group: $0) }
         .sheet(item: $store.mutationPreview, onDismiss: { store.cancelPreview() }) { MutationPreview(plan: $0) }
         .task { if !store.hasScanned && !store.isScanning { await store.rescan() } }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await store.refreshAgentRequests() }
+        }
     }
 
     private var listHeader: some View {
@@ -102,6 +109,7 @@ struct ContentView: View {
             if store.page == .findings { Text("로컬 검사 · \(store.filteredFindings.count)건").font(.caption).foregroundStyle(.secondary) }
             if store.page == .history { Text("로컬 검사 이력 · 최근 50회 보관").font(.caption).foregroundStyle(.secondary) }
             if store.page == .changes { Text("완료 기록 최근 100회 · 중단된 작업 포함").font(.caption).foregroundStyle(.secondary) }
+            if store.page == .requests { Text("에이전트가 제안한 변경 · 앱에서 검토 후 적용").font(.caption).foregroundStyle(.secondary) }
         }.padding(16)
     }
     private var listTitle: String {
@@ -120,6 +128,29 @@ struct ContentView: View {
         }
         .listStyle(.inset).scrollContentBackground(.hidden)
         .overlay { if store.filteredSkills.isEmpty { emptyList("스킬이 없습니다", description: store.hasFilters || store.libraryFilter != .all ? "검색어나 필터를 바꿔 보세요." : "설정에서 스킬 폴더를 확인하거나 추가하세요.") } }
+    }
+
+    private var agentRequestList: some View {
+        @Bindable var store = store
+        return VStack(spacing: 0) {
+            if let message = store.agentRequestsMessage { Text(message).font(.callout).padding(16) }
+            List(selection: $store.selectedAgentRequestID) {
+                ForEach(store.filteredAgentRequests) { request in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(request.title).lineLimit(2)
+                        Text("\(store.agentRequestState(request)) · \(request.moves.count)개 이동")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text(request.createdAt, format: .dateTime.month().day().hour().minute())
+                            .font(.caption).foregroundStyle(.secondary)
+                    }.padding(.vertical, 4).tag(request.id)
+                }
+            }.listStyle(.inset).scrollContentBackground(.hidden)
+                .overlay {
+                    if store.agentRequests.isEmpty && store.agentRequestsMessage == nil {
+                        emptyList("에이전트 요청이 없습니다", description: "설정에서 에이전트 연동을 설치한 뒤 변경 요청을 보내세요.")
+                    }
+                }
+        }
     }
     private var groupList: some View {
         @Bindable var store = store

@@ -66,8 +66,8 @@ public struct MutationPlan: Codable, Identifiable, Sendable {
     public var completedAt: Date?
     public let undoes: UUID?
     public let groupSelection: GroupSelectionChange?
-    public init(title: String, installations: [Move], undoes: UUID? = nil, groupSelection: GroupSelectionChange? = nil) {
-        id = UUID(); self.title = title; self.installations = installations; createdAt = .now
+    public init(id: UUID = UUID(), title: String, installations: [Move], undoes: UUID? = nil, groupSelection: GroupSelectionChange? = nil) {
+        self.id = id; self.title = title; self.installations = installations; createdAt = .now
         self.undoes = undoes; self.groupSelection = groupSelection
     }
 }

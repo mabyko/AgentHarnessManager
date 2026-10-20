@@ -1,12 +1,18 @@
 import Foundation
 
 public enum SkillAgent: String, CaseIterable, Sendable, Codable {
-    case codex, claudeCode, custom
+    case codex, claudeCode, grokBuild, antigravity, opencode, pi, devin, cursor, custom
 
     public var displayName: String {
         switch self {
         case .codex: "Codex"
         case .claudeCode: "Claude Code"
+        case .grokBuild: "Grok Build"
+        case .antigravity: "Antigravity"
+        case .opencode: "OpenCode"
+        case .pi: "Pi"
+        case .devin: "Devin CLI"
+        case .cursor: "Cursor"
         case .custom: "다른 에이전트"
         }
     }

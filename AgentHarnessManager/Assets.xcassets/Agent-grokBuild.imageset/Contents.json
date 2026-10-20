@@ -1,0 +1,26 @@
+{
+  "images": [
+    {
+      "filename": "grok-dark.svg",
+      "idiom": "universal"
+    },
+    {
+      "filename": "grok-light.svg",
+      "idiom": "universal",
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ]
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  },
+  "properties": {
+    "template-rendering-intent": "original",
+    "preserves-vector-representation": true
+  }
+}
