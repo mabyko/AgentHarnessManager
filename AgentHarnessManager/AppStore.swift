@@ -866,7 +866,7 @@ extension AppStore {
         guard canEditRoots else { return }
         let panel = NSOpenPanel()
         panel.title = "skills CLI 실행 파일 선택"
-        panel.message = "설치된 skills 실행 파일을 선택하세요. 감지만으로 실행하거나 다운로드하지 않습니다."
+        panel.message = "bunx, npx 또는 skills 실행 파일을 선택하세요. 감지만으로 실행하거나 다운로드하지 않습니다."
         panel.canChooseFiles = true; panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -876,6 +876,10 @@ extension AppStore {
     }
 
     func prepareSkillsCLIInstallation(source: URL, agent: SkillAgent, remoteSource: URL?) async -> SkillsCLIPlan? {
+        await prepareSkillsCLIInstallation(source: source, agents: [agent], remoteSource: remoteSource)
+    }
+
+    func prepareSkillsCLIInstallation(source: URL, agents: [SkillAgent], remoteSource: URL?) async -> SkillsCLIPlan? {
         guard managementMethod == .skillsCLI, canChangeFiles, mutationPreview == nil, let executable = skillsCLIExecutable else {
             libraryMessage = "설정에서 skills CLI 실행 파일과 설치 방식을 확인하세요."; return nil
         }
@@ -884,7 +888,7 @@ extension AppStore {
         let service = skillsCLIService
         do {
             let plan = try await Task.detached(priority: .userInitiated) {
-                try service.prepare(folder: source, agent: agent, executable: executable, remoteSource: remoteSource)
+                try service.prepare(folder: source, agents: agents, executable: executable, remoteSource: remoteSource)
             }.value
             libraryMessage = nil
             return plan

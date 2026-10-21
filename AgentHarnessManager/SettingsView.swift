@@ -110,10 +110,8 @@ struct SettingsView: View {
                 Text("CLI 삭제는 영구 삭제이며 업데이트는 로컬 수정을 덮어씁니다. 앱 변경 이력의 자동 되돌리기는 제공하지 않습니다. 켜기·끄기는 기존 앱의 복구 가능한 전환을 사용합니다.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            if store.skillsCLIExecutable == nil {
-                Text("전역 설치 또는 기존 npx·bunx 캐시에서 skills 실행 파일을 찾습니다. npx만 설치돼 있거나 CLI가 없어져도 자동 다운로드하거나 설치 방식을 바꾸지 않습니다.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            Text("bunx skills를 우선 사용하고, 없으면 npx --yes skills를 사용합니다. 감지는 실행 없이 진행하며, 설치·삭제·업데이트 검토 시 실행기가 CLI 패키지를 준비할 수 있습니다.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 

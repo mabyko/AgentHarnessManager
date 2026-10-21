@@ -102,13 +102,28 @@ extension SkillsCLIService {
         return name
     }
 
+    func legacyLinkRoots(_ agent: SkillAgent, name: String) throws -> [DiscoveryRoot] {
+        guard try installRoot(agent).url == canonicalRoot().url else { return [] }
+        let target = canonicalRoot().url.appendingPathComponent(name).standardizedFileURL.path
+        return try ManagementConfiguration.defaultRoots(home: home).filter { root in
+            guard root.agent == agent, root.url != canonicalRoot().url else { return false }
+            let link = root.url.appendingPathComponent(name)
+            try validateParents(link.path)
+            var info = stat()
+            guard lstat(link.path, &info) == 0, info.st_mode & S_IFMT == S_IFLNK else { return false }
+            let text = try FileManager.default.destinationOfSymbolicLink(atPath: link.path)
+            let destination = text.hasPrefix("/") ? URL(fileURLWithPath: text) : root.url.appendingPathComponent(text)
+            return destination.standardizedFileURL.path == target
+        }
+    }
+
     func validateInstallation(_ item: SkillInstallation, removal: Bool) throws -> SkillAgent {
         guard item.isEnabled, item.problems.isEmpty else { throw failure("꺼져 있거나 읽을 수 없는 설치는 먼저 복원·확인한 뒤 CLI로 관리하세요.") }
         let name = URL(fileURLWithPath: item.originalPath).lastPathComponent
         let agent = item.location.agent
-        let roots = removal ? try removalRoots(agent) : [try installRoot(agent)]
+        let roots = (removal ? try removalRoots(agent) : [try installRoot(agent)]) + (try legacyLinkRoots(agent, name: name))
         guard roots.contains(where: { $0.url.appendingPathComponent(name).path == item.originalPath }) else {
-            throw failure("이 위치는 skills CLI의 사용자 전역 관리 경로가 아닙니다. 설정에서 관리 도구를 확인하세요.")
+            throw failure("CLI가 관리할 수 있는 전역 설치 또는 공유 원본 링크인지 확인하세요: " + item.originalPath)
         }
         _ = try pathState(item.originalPath)
         if item.isSymbolicLink {
@@ -128,7 +143,8 @@ extension SkillsCLIService {
         let name = try matchingName(folderName, entries: receiptEntries())
         let agents = try Set(installations.map { try validateInstallation($0, removal: true) }).sorted { $0.rawValue < $1.rawValue }
         let scopedAgents = allAgents ? SkillAgent.allCases.filter { $0 != .custom } : agents
-        let roots = try scopedAgents.flatMap(removalRoots)
+        let legacy = try scopedAgents.flatMap { try legacyLinkRoots($0, name: folderName) }
+        let roots = (try scopedAgents.flatMap(removalRoots)) + legacy
         let paths = Set(roots.map { $0.url.appendingPathComponent(folderName).path }).sorted()
         let canonical = canonicalRoot().url.appendingPathComponent(folderName).path
         let selected = Set(installations.map(\.originalPath))
@@ -147,8 +163,10 @@ extension SkillsCLIService {
             name: name, agent: agents[0], checkedPaths: paths, expectedPaths: expected, roots: roots,
             sourceFolder: nil, sourceHash: nil, executableHash: binaryHash, receiptHash: try receiptHash(), documentHash: nil)
         plan.operation = .remove; plan.pathStates = states
+        plan.legacyLinkCleanup = legacy.map { $0.url.appendingPathComponent(folderName).path }
         plan.scopeNote = "대상 에이전트: " + (allAgents ? "CLI가 인식하는 모든 에이전트(현재 목록 밖의 동명 설치 포함)" : agents.map(\.displayName).joined(separator: ", "))
             + ". CLI가 해당 설치·이전 경로를 영구 삭제하고, 사용 여부에 따라 공유 원본과 설치 기록도 정리합니다. 앱의 보관·자동 되돌리기는 제공하지 않습니다."
+            + (legacy.isEmpty ? "" : " CLI가 남긴 아래 이전 경로의 설치 링크만 앱이 정리합니다: " + plan.legacyLinkCleanup.joined(separator: ", "))
         return plan
     }
 
@@ -184,7 +202,7 @@ extension SkillsCLIService {
         guard catalog.count == 1, let skill = catalog.first, skill.name == source.name, !skill.hasProblems,
               let documentHash = skill.installations.first?.contentHash else { throw failure("업데이트의 스킬 이름·문서를 확인하세요.") }
         let agents = try Set(installations.map { try validateInstallation($0, removal: false) }).sorted { $0.rawValue < $1.rawValue }
-        let roots = [canonicalRoot()] + (try agents.map(installRoot))
+        let roots = [canonicalRoot()] + (try agents.map(installRoot)) + (try agents.flatMap { try legacyLinkRoots($0, name: Self.directoryName(source.name)) })
         let paths = Set(roots.map { $0.url.appendingPathComponent(Self.directoryName(source.name)).path }).sorted()
         var states: [String: String] = [:]
         for path in paths { states[path] = try pathState(path) }

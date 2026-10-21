@@ -447,20 +447,20 @@ struct SkillInstallSheet: View {
     @State private var busy = false
     @State private var message: String?
     @State private var request: Task<Void, Never>?
-    @State private var cliAgent: SkillAgent = .codex
+    @State private var cliAgents: Set<SkillAgent> = [.codex]
     let onPrepared: (MutationPlan) -> Void
     let onCLIPrepared: (SkillsCLIPlan, GitHubSkillDownload?) -> Void
     private var root: DiscoveryRoot? { store.automaticRoots.first { $0.id == rootID } }
     private var candidate: GitHubSkillCandidate? { listing?.skills.first { $0.id == candidateID } }
     private var canPrepare: Bool {
-        (store.managementMethod == .direct ? root != nil : store.skillsCLIExecutable != nil)
+        (store.managementMethod == .direct ? root != nil : store.skillsCLIExecutable != nil && !cliAgents.isEmpty)
             && (origin == .local ? source != nil : candidate != nil) && !busy && !store.isPreparingChange
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("스킬 설치").font(.title2.weight(.semibold))
-            Picker("설치 방법", selection: $origin) {
+            Picker("설치 원본", selection: $origin) {
                 ForEach(Origin.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }.pickerStyle(.segmented).disabled(busy || store.isPreparingChange)
             if origin == .github { githubInput }
@@ -473,11 +473,28 @@ struct SkillInstallSheet: View {
                 Text("관리 도구 · 설정 → 일반에서 변경").font(.caption).foregroundStyle(.secondary)
             }
             if store.managementMethod == .skillsCLI {
-                Picker("설치할 에이전트", selection: $cliAgent) {
-                    ForEach(SkillAgent.allCases.filter { $0 != .custom }, id: \.self) { Text($0.displayName).tag($0) }
-                }.disabled(busy || store.isPreparingChange).accessibilityIdentifier("library.installAgent")
-                Text("skills CLI의 사용자 전역 설치 규칙을 따릅니다. 한 에이전트를 선택하므로 CLI 기본 동작에 따라 해당 위치에 복사합니다. 다음 단계에서 실행 명령과 경로를 검토합니다.")
-                    .font(.caption).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("설치할 에이전트").font(.callout.weight(.medium))
+                        Spacer()
+                        Text("사용자 전역 · -g").font(.caption).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("library.installScope")
+                    }
+                    LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], alignment: .leading, spacing: 10) {
+                        ForEach(SkillAgent.allCases.filter { $0 != .custom }, id: \.self) { agent in
+                            Toggle(agent.displayName, isOn: Binding(get: { cliAgents.contains(agent) }, set: { selected in
+                                if selected { cliAgents.insert(agent) } else { cliAgents.remove(agent) }
+                            })).toggleStyle(.checkbox).accessibilityIdentifier("library.installAgent." + agent.rawValue)
+                        }
+                    }.disabled(busy || store.isPreparingChange)
+                    if let executable = store.skillsCLIExecutable {
+                        Text(executable.lastPathComponent == "bunx" ? "bunx skills" : executable.lastPathComponent == "npx" ? "npx --yes skills" : "skills")
+                            .font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("library.installRunner")
+                    }
+                    Text("선택한 에이전트에 CLI로 설치합니다. 다음 단계에서 실행 명령과 설치 경로를 확인하세요.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 if store.skillsCLIExecutable == nil {
                     Label("skills CLI를 찾을 수 없습니다. 설정에서 다시 확인하거나 실행 파일을 선택하세요.", systemImage: "exclamationmark.triangle")
                         .font(.caption).foregroundStyle(WorkbenchTheme.warning)
@@ -512,7 +529,7 @@ struct SkillInstallSheet: View {
         .onAppear {
             store.libraryMessage = nil
             rootID = store.automaticRoots.first { $0.agent == store.agentFilter }?.id ?? store.automaticRoots.first?.id
-            cliAgent = store.agentFilter == .custom ? .codex : store.agentFilter ?? .codex
+            cliAgents = [store.agentFilter == .custom ? .codex : store.agentFilter ?? .codex]
         }
         .onDisappear { request?.cancel() }
         .onChange(of: repositoryInput) { _, _ in listing = nil; candidateID = nil; message = nil }
@@ -523,7 +540,7 @@ struct SkillInstallSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("공개 GitHub 저장소").font(.callout.weight(.medium))
             HStack {
-                TextField("https://github.com/owner/repo", text: $repositoryInput)
+                TextField("owner/repo 또는 https://github.com/owner/repo", text: $repositoryInput)
                     .textFieldStyle(.roundedBorder).disabled(busy || store.isPreparingChange)
                     .accessibilityIdentifier("library.githubURL")
                     .onSubmit { if !busy { loadRepository() } }
@@ -584,7 +601,7 @@ struct SkillInstallSheet: View {
 
     private func prepare() {
         guard canPrepare else { return }
-        let method = store.managementMethod, root = root, agent = cliAgent
+        let method = store.managementMethod, root = root, agents = Array(cliAgents)
         busy = true; message = nil; store.libraryMessage = nil
         request = Task {
             var download: GitHubSkillDownload?
@@ -606,7 +623,7 @@ struct SkillInstallSheet: View {
                 try Task.checkCancellation()
                 guard store.managementMethod == method else { throw CatalogReadError.inaccessible("관리 도구가 바뀌었습니다. 다시 검토하세요.") }
                 if method == .skillsCLI {
-                    if let plan = await store.prepareSkillsCLIInstallation(source: folder, agent: agent, remoteSource: remoteSource) {
+                    if let plan = await store.prepareSkillsCLIInstallation(source: folder, agents: agents, remoteSource: remoteSource) {
                         guard !Task.isCancelled else { return }
                         onCLIPrepared(plan, download)
                         download = nil

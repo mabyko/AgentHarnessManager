@@ -21,7 +21,7 @@ final class SkillsCLITests: XCTestCase {
             printf '%s\\n' "$DISABLE_TELEMETRY:$DO_NOT_TRACK" > "$HOME/telemetry"
             target="$HOME/.agents/skills/$AHM_TARGET"
             if [ "$1" = "remove" ]; then
-                rm -rf -- "$target" "$HOME/.claude/skills/$AHM_TARGET"
+                rm -rf -- "$target" "$HOME/.claude/skills/$AHM_TARGET" "$HOME/.grok/skills/$AHM_TARGET" "$HOME/.config/devin/skills/$AHM_TARGET"
                 printf '%s' '{"version":3,"skills":{}}' > "$HOME/.agents/.skill-lock.json"
                 echo 'fixture CLI removal'
                 exit \(status)
@@ -222,5 +222,92 @@ final class SkillsCLITests: XCTestCase {
         try FileManager.default.createSymbolicLink(at: redirect, withDestinationURL: state.deletingLastPathComponent())
         let unsafe = SkillsCLIService(home: f.home, environment: ["XDG_STATE_HOME": redirect.path], detector: detector)
         XCTAssertThrowsError(try unsafe.updateSource(for: installed(f)))
+    }
+
+    func testExistingGlobalCLIInstallWithLegacyPiLinkSupportsMaintenance() throws {
+        let f = try Fixture(); defer { f.remove() }
+        _ = try f.service.apply(f.plan()); try receipt(f)
+        let canonical = f.home.appendingPathComponent(".agents/skills/example-skill")
+        for path in [".claude/skills", ".grok/skills", ".config/devin/skills", ".pi/agent/skills"] {
+            let link = f.home.appendingPathComponent(path + "/example-skill")
+            try FileManager.default.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: canonical)
+        }
+        let items = installed(f)
+        XCTAssertEqual(items.count, 5)
+        for item in items {
+            XCTAssertNoThrow(try f.service.updateSource(for: [item]), item.location.agent.rawValue + " · " + item.originalPath)
+        }
+        XCTAssertNoThrow(try f.service.updateSource(for: items), "A valid global CLI receipt and legacy Pi link must remain updateable")
+        let source = try f.service.updateSource(for: items)
+        let update = try f.service.prepareUpdate(folder: f.source, installations: items, source: source,
+            remoteSource: URL(string: "https://github.com/owner/repo/tree/" + String(repeating: "b", count: 40) + "/skills/example")!, executable: f.executable)
+        XCTAssertTrue(update.expectedPaths.contains(f.home.appendingPathComponent(".pi/agent/skills/example-skill").path))
+        let plan = try f.service.prepareRemoval(installations: items, allInstallations: items, executable: f.executable, allAgents: true)
+        let legacy = f.home.appendingPathComponent(".pi/agent/skills/example-skill")
+        XCTAssertEqual(plan.legacyLinkCleanup, [legacy.path])
+        XCTAssertTrue(plan.scopeNote.contains("이전 경로의 설치 링크"))
+        _ = try f.service.apply(plan)
+        XCTAssertEqual(try f.service.pathState(legacy.path), "missing")
+        XCTAssertTrue(installed(f).isEmpty)
+    }
+
+    func testLegacyCleanupRejectsAChangedLinkAndIndependentCopy() throws {
+        let f = try Fixture(); defer { f.remove() }
+        _ = try f.service.apply(f.plan()); try receipt(f)
+        let legacy = f.home.appendingPathComponent(".pi/agent/skills/example-skill")
+        try FileManager.default.createDirectory(at: legacy.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: legacy, withDestinationURL: f.home.appendingPathComponent(".agents/skills/example-skill"))
+        let items = installed(f)
+        let plan = try f.service.prepareRemoval(installations: items, allInstallations: items, executable: f.executable, allAgents: true)
+        try FileManager.default.removeItem(at: legacy)
+        try FileManager.default.copyItem(at: f.source, to: legacy)
+        XCTAssertThrowsError(try f.service.apply(plan))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: legacy.appendingPathComponent("SKILL.md").path))
+        XCTAssertThrowsError(try f.service.updateSource(for: installed(f)))
+    }
+
+    func testBunxPriorityNpxFallbackAndLauncherArguments() throws {
+        let f = try Fixture(); defer { f.remove() }
+        let bin = f.executable.deletingLastPathComponent()
+        for name in ["npx", "bunx"] {
+            let prefix = name == "bunx" ? "skills" : "--yes skills"
+            let script = """
+            #!/bin/sh
+            printf '%s\\n' "$@" > "$HOME/launcher-arguments"
+            for expected in \(prefix); do
+                [ "$1" = "$expected" ] || exit 5
+                shift
+            done
+            if [ "$1" = "--version" ]; then echo 'Preparing package'; echo '1.7.4'; exit 0; fi
+            exec "$(dirname "$0")/skills" "$@"
+            """
+            let executable = bin.appendingPathComponent(name)
+            try script.write(to: executable, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+        }
+        XCTAssertEqual(f.service.detect()?.lastPathComponent, "bunx")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: f.home.appendingPathComponent("launcher-arguments").path))
+        for runner in ["bunx", "npx"] {
+            let executable = try XCTUnwrap(f.service.detect())
+            XCTAssertEqual(executable.lastPathComponent, runner)
+            let plan = try f.service.prepare(folder: f.source, agent: .codex, executable: executable)
+            XCTAssertTrue(plan.command.contains("'skills'"))
+            _ = try f.service.apply(plan)
+            let args = try String(contentsOf: f.home.appendingPathComponent("launcher-arguments"), encoding: .utf8)
+            XCTAssertTrue(args.hasPrefix(runner == "bunx" ? "skills\nadd\n" : "--yes\nskills\nadd\n"))
+            try FileManager.default.removeItem(at: URL(fileURLWithPath: plan.expectedPaths[0]))
+            try FileManager.default.removeItem(at: executable)
+        }
+        XCTAssertEqual(f.service.detect(), f.executable)
+    }
+
+    func testMultipleAgentsHaveExplicitArgumentsAndReviewedDestinations() throws {
+        let f = try Fixture(); defer { f.remove() }
+        let plan = try f.service.prepare(folder: f.source, agents: [.codex, .claudeCode, .codex], executable: f.executable)
+        XCTAssertEqual(plan.arguments, ["add", f.source.path, "--global", "--agent", "claude-code", "codex", "--skill", "Example Skill", "--yes"])
+        XCTAssertEqual(plan.expectedPaths.count, 2)
+        XCTAssertTrue(plan.scopeNote.contains("Codex")); XCTAssertTrue(plan.scopeNote.contains("Claude Code"))
+        XCTAssertThrowsError(try f.service.prepare(folder: f.source, agents: [], executable: f.executable))
     }
 }

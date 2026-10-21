@@ -62,7 +62,11 @@
 
 ## 2026-10-21 로컬 스킬 설치와 제거
 
-`SkillManagementMethod`는 앱 직접 관리와 skills CLI를 구분하며 기존 `skillInstallMethod` 설정 키를 유지해 이전 선택을 계승합니다. 선택은 설치·삭제·업데이트에 함께 적용하며 CLI가 없어져도 앱 파일 처리로 우회하지 않습니다. `SkillsCLIPlan.operation`은 install/remove/update를 구별하고 공통 검토·실행 잠금·실패 처리를 사용합니다. CLI 감지는 실행 경로·기존 npx/bunx 캐시·명시한 파일을 확인하며 자동 다운로드하지 않습니다. 1.7.4 이상의 1.x 버전을 검증하고 `Process.arguments`로 실행하며 자식 텔레메트리를 끕니다. CLI 파일·기록·복사/링크 방식은 CLI가 관리하므로 앱 저널의 자동 되돌리기는 없습니다.
+`SkillManagementMethod`는 앱 직접 관리와 skills CLI를 구분하며 기존 `skillInstallMethod` 설정 키를 유지해 이전 선택을 계승합니다. 선택은 설치·삭제·업데이트에 함께 적용하며 CLI가 없어져도 앱 파일 처리로 우회하지 않습니다. `SkillsCLIPlan.operation`은 install/remove/update를 구별하고 공통 검토·실행 잠금·실패 처리를 사용합니다. CLI 감지는 실행 없이 `bunx` → `npx` → `skills` 순으로 경로를 찾고 명시한 파일 선택을 우선합니다. 실행은 각각 `bunx skills`, `npx --yes skills`, 직접 `skills` 명령으로 전달합니다. 검토 준비 시 실행기가 패키지를 내려받을 수 있으며 캐시 내부 실행 파일을 직접 탐색하지 않습니다. 1.7.4 이상의 1.x 버전을 검증하고 `Process.arguments`로 실행하며 자식 텔레메트리를 끕니다. CLI 파일·기록·복사/링크 방식은 CLI가 관리하므로 앱 저널의 자동 되돌리기는 없습니다.
+
+`SkillsCLIService.prepare`는 선택한 여러 에이전트를 명시한 `add <source> --global --agent <agents…> --skill <name> --yes`를 계획하며 각 대상과 공유 원본의 충돌을 검사합니다. 단일 에이전트 API도 같은 계획 경로를 사용합니다.
+
+이전 CLI의 기본 설치 링크(예: `~/.pi/agent/skills/<name>`)도 현재 공유 원본을 직접 가리키는 경우 유지보수에 포함합니다. 사용자 지정 경로·독립 폴더는 이 예외에 포함하지 않습니다. 삭제 검토에 잔여 링크 정리를 명시하며, CLI 성공 후에도 남은 링크만 검토 때의 inode·형식·링크 문구와 비교한 뒤 unlink합니다. 업데이트는 같은 링크를 유지합니다.
 
 `SkillsCLIService.prepareRemoval`은 실제 `remove <name> --global [--agent …] --yes`를 계획합니다. 이름은 설치 폴더와 설치 기록 키의 정규화가 일치해야 하며 wildcard·저장소 단위 삭제는 만들지 않습니다. 위치별 삭제는 CLI가 함께 정리할 이전 경로·공유 원본을 검토하고, 스킬 전체 삭제는 앱의 8개 에이전트 밖 동명 설치도 포함한 모든 CLI 에이전트를 대상으로 명시합니다. 검토 범위 밖 공유 참조·꺼진 설치·사용자 지정/제공자 경로는 차단합니다. 실행 전 경로의 inode·링크 문자·폴더 지문과 설치 기록을 재검증하고 완료 후 대상을 확인합니다. CLI가 설치 기록을 정리하며 앱이 남은 파일을 임의로 지우지 않습니다. 직접 관리의 제거는 아래 저널 보관 계약을 유지합니다.
 

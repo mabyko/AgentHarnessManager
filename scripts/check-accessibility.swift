@@ -214,6 +214,17 @@ import SwiftUI
         key(53)
         wait("Escape must cancel CLI delete") { !elements(app).contains { string($0, "AXRole") == "AXSheet" } }
         check(FileManager.default.fileExists(atPath: home.appendingPathComponent(".agents/skills/keyboard-demo/SKILL.md").path), "Cancelled CLI changes must preserve source")
+        press("library.install", expecting: "library.installAgent.codex")
+        check(elements(app).filter { string($0, "AXIdentifier").hasPrefix("library.installAgent.") }.count == 8, "CLI install must expose all eight agents as independent checkboxes")
+        check((value(find("library.installAgent.codex"), "AXValue") as? NSNumber)?.boolValue == true, "CLI install must preserve the initial Codex choice")
+        press("library.installAgent.claudeCode")
+        check((value(find("library.installAgent.codex"), "AXValue") as? NSNumber)?.boolValue == true && (value(find("library.installAgent.claudeCode"), "AXValue") as? NSNumber)?.boolValue == true, "CLI install must allow multiple agents")
+        check(string(find("library.installScope"), "AXValue").contains("-g"), "CLI global scope must be explicit")
+        _ = find("library.installRunner")
+        try Data().write(to: home.appendingPathComponent("capture.cli-install"))
+        wait("CLI install screenshots were not captured") { FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.cli-install.done").path) }
+        key(53)
+        wait("Escape must cancel CLI installation") { !elements(app).contains { string($0, "AXRole") == "AXSheet" } }
         AXUIElementPerformAction(find("a11y.settings"), "AXRaise" as CFString)
         try FileManager.default.removeItem(at: home.appendingPathComponent("bin/skills"))
         press("settings.refreshSkillsCLI")
@@ -369,6 +380,20 @@ import SwiftUI
                         }
                     }
                     try? Data().write(to: home.appendingPathComponent("capture.lifecycle.done"))
+                }
+                if FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.cli-install").path),
+                   !FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.cli-install.done").path),
+                   let sheet = library.attachedSheet, let view = sheet.contentView {
+                    for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
+                        sheet.appearance = NSAppearance(named: appearance)
+                        view.layoutSubtreeIfNeeded()
+                        try? await Task.sleep(for: .milliseconds(150))
+                        if let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                            view.cacheDisplay(in: view.bounds, to: bitmap)
+                            try? bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/ahm-cli-install-\(name).png"))
+                        }
+                    }
+                    try? Data().write(to: home.appendingPathComponent("capture.cli-install.done"))
                 }
                 if FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.install").path),
                    !FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.install.done").path),
