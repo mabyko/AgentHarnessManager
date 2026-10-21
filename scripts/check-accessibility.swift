@@ -81,8 +81,10 @@ import SwiftUI
             Thread.sleep(forTimeInterval: 0.2)
         }
         wait("Fixture windows did not open") { elements(app).contains { string($0, "AXIdentifier") == "settings.page.general" } }
-        NSRunningApplication(processIdentifier: process.processIdentifier)!.activate(options: [.activateIgnoringOtherApps])
+        NSRunningApplication(processIdentifier: process.processIdentifier)!.activate()
         AXUIElementPerformAction(find("a11y.settings"), "AXRaise" as CFString)
+        _ = AXUIElementSetAttributeValue(find("a11y.settings"), "AXMain" as CFString, kCFBooleanTrue)
+        NSRunningApplication(processIdentifier: process.processIdentifier)!.activate()
         Thread.sleep(forTimeInterval: 0.3)
 
         selectPage("general")
@@ -185,6 +187,15 @@ import SwiftUI
         func expectText(_ text: String) {
             wait("Missing section description: " + text) { elements(library).contains { string($0, "AXValue").contains(text) } }
         }
+        AXUIElementPerformAction(find("a11y.settings"), "AXRaise" as CFString)
+        selectPage("general")
+        selectMenu("settings.installMethod", "skills CLI")
+        check(string(find("settings.installMethod"), "AXValue").contains("skills CLI"), "Detected CLI must be selectable")
+        try FileManager.default.removeItem(at: home.appendingPathComponent("bin/skills"))
+        press("settings.refreshSkillsCLI")
+        check(string(find("settings.installMethod"), "AXValue").contains("skills CLI"), "CLI disappearance must preserve selection")
+        selectMenu("settings.installMethod", "앱 직접 설치")
+        AXUIElementPerformAction(library, "AXRaise" as CFString)
         press("sidebar.activity", expecting: "workbench.activitySection")
         expectHeading("활동 이력")
         for (segment, description) in [("요청", "에이전트가 제안한 변경"), ("변경", "완료 기록 최근"), ("검사 이력", "로컬 검사 이력")] {
@@ -283,8 +294,12 @@ import SwiftUI
             try Data("#!/bin/sh\nexit 99\n".utf8).write(to: executable)
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
         }
+        let skillsCLI = bin.appendingPathComponent("skills")
+        try "#!/bin/sh\necho 1.7.4\n".write(to: skillsCLI, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: skillsCLI.path)
+        let cliService = SkillsCLIService(home: home, environment: [:], detector: AgentInstallationDetector(executableDirectories: [bin], applicationDirectories: []))
         let store = AppStore(defaults: defaults, home: home,
-                             installationDetector: AgentInstallationDetector(executableDirectories: [bin], applicationDirectories: []), instructionEnvironment: [:])
+                             installationDetector: AgentInstallationDetector(executableDirectories: [bin], applicationDirectories: []), skillsCLIService: cliService, instructionEnvironment: [:])
         func window<V: View>(_ root: V, id: String, size: NSSize) -> NSWindow {
             let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: 80, y: 80), size: size), styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false

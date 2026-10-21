@@ -24,7 +24,7 @@ public struct AgentInstallationDetector: Sendable {
     public init(home: URL = FileManager.default.homeDirectoryForCurrentUser,
                 environment: [String: String] = ProcessInfo.processInfo.environment) {
         let paths = (environment["PATH"] ?? "").split(separator: ":").map(String.init)
-            + [".local/bin", ".grok/bin", ".opencode/bin", ".bun/bin", ".local/share/mise/shims", ".volta/bin"]
+            + [".local/bin", ".grok/bin", ".opencode/bin", ".bun/bin", ".npm-global/bin", ".local/share/mise/shims", ".volta/bin"]
                 .map { home.appendingPathComponent($0).path }
             + ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
         self.init(executableDirectories: paths.filter { $0.hasPrefix("/") }.map { URL(fileURLWithPath: $0) },
@@ -56,6 +56,8 @@ public struct AgentInstallationDetector: Sendable {
     func findExecutable(_ name: String) -> URL? {
         executableDirectories.lazy.map { $0.appendingPathComponent(name) }.first { isExecutableFile($0) }
     }
+
+    var executableSearchPath: String { executableDirectories.map(\.path).joined(separator: ":") }
 
     private func isExecutableFile(_ url: URL) -> Bool {
         let resolved = url.resolvingSymlinksInPath()

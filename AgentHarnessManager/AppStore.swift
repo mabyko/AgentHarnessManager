@@ -100,6 +100,15 @@ final class AppStore {
     var selectedReviewID: UUID?
     var selectedMutationID: UUID?
     var mutationPreview: MutationPlan?
+    var skillsCLIInstallPreview: SkillsCLIInstallPlan?
+    private(set) var installMethod: SkillInstallMethod
+    private(set) var skillsCLIExecutable: URL?
+    private(set) var skillsCLIOutput: String?
+    private(set) var skillsCLIInstallFailed = false
+    @ObservationIgnored private let skillsCLIService: SkillsCLIService
+    @ObservationIgnored private var skillsCLIDownload: GitHubSkillDownload?
+    private static let installMethodKey = "skillInstallMethod"
+    private static let skillsCLIPathKey = "skillsCLIExecutable"
     var libraryMessage: String?
     private(set) var preferences = AppPreferences()
     private(set) var preferencesLoadFailed = false
@@ -169,9 +178,14 @@ final class AppStore {
 
     init(defaults: UserDefaults = .standard, home: URL = FileManager.default.homeDirectoryForCurrentUser,
          installationDetector: AgentInstallationDetector? = nil,
+         skillsCLIService: SkillsCLIService? = nil,
          instructionEnvironment: [String: String] = ProcessInfo.processInfo.environment) {
         self.defaults = defaults
         self.home = home
+        self.skillsCLIService = skillsCLIService ?? SkillsCLIService(home: home)
+        installMethod = defaults.string(forKey: Self.installMethodKey).flatMap(SkillInstallMethod.init(rawValue:)) ?? .direct
+        let preferredCLI = defaults.string(forKey: Self.skillsCLIPathKey).map { URL(fileURLWithPath: $0) }
+        skillsCLIExecutable = self.skillsCLIService.detect(preferred: preferredCLI)
         instructions = InstructionStore(service: GlobalInstructionService(home: home, environment: instructionEnvironment,
             backupDirectory: home.resolvingSymlinksInPath().appendingPathComponent("Library/Application Support/"
                 + (Bundle.main.bundleIdentifier ?? "AgentHarnessManager") + "/InstructionBackups")))
@@ -422,6 +436,7 @@ final class AppStore {
         guard !isMutating, !isPreparingChange else { return }
         isScanning = true
         await refreshAgentInstallations()
+        refreshSkillsCLI()
         let home = home
         let managed = automaticRoots
         let saved: LibraryJournal
@@ -547,9 +562,9 @@ extension AppStore {
     var filteredFindings: [ReviewFinding] { currentFindings.filter { matchesSearch("\($0.title) \($0.evidence) \($0.path)") } }
     var filteredReviews: [ReviewRecord] { reviews.filter { matchesSearch("\($0.provider) \($0.date.formatted())") } }
     var selectedReview: ReviewRecord? { reviews.first { $0.id == selectedReviewID } }
-    var metadataIsEditable: Bool { hasScanned && !isScanning && !isMutating && !isPreparingChange && !preferencesLoadFailed && !journalLoadFailed && !groupSyncFailed && journal.pending == nil && mutationPreview == nil }
-    var canChangeFiles: Bool { hasScanned && !isScanning && !isMutating && !isPreparingChange && !journalLoadFailed && !groupSyncFailed && journal.pending == nil }
-    var canEditRoots: Bool { !isScanning && !isMutating && !isPreparingChange && !journalLoadFailed && !groupSyncFailed && journal.pending == nil && mutationPreview == nil }
+    var metadataIsEditable: Bool { hasScanned && !isScanning && !isMutating && !isPreparingChange && !preferencesLoadFailed && !journalLoadFailed && !groupSyncFailed && journal.pending == nil && mutationPreview == nil && skillsCLIInstallPreview == nil }
+    var canChangeFiles: Bool { hasScanned && !isScanning && !isMutating && !isPreparingChange && !journalLoadFailed && !groupSyncFailed && journal.pending == nil && skillsCLIInstallPreview == nil }
+    var canEditRoots: Bool { !isScanning && !isMutating && !isPreparingChange && !journalLoadFailed && !groupSyncFailed && journal.pending == nil && mutationPreview == nil && skillsCLIInstallPreview == nil }
     var mutations: [MutationPlan] { (journal.pending.map { [$0] } ?? []) + journal.completed }
     var filteredMutations: [MutationPlan] {
         mutations.filter { plan in
@@ -790,7 +805,7 @@ extension AppStore {
     }
 
     func prepareInstallation(source: URL, root: DiscoveryRoot, repository: SourceRepository? = nil) async -> MutationPlan? {
-        guard canChangeFiles, mutationPreview == nil else { return nil }
+        guard installMethod == .direct, canChangeFiles, mutationPreview == nil else { return nil }
         isPreparingChange = true
         defer { isPreparingChange = false }
         let managed = automaticRoots
@@ -804,6 +819,88 @@ extension AppStore {
             libraryMessage = nil
             return plan
         } catch { libraryMessage = error.localizedDescription; return nil }
+    }
+
+    func refreshSkillsCLI() {
+        let preferred = defaults.string(forKey: Self.skillsCLIPathKey).map { URL(fileURLWithPath: $0) }
+        skillsCLIExecutable = skillsCLIService.detect(preferred: preferred)
+    }
+
+    func setInstallMethod(_ method: SkillInstallMethod) {
+        guard canEditRoots, method == .direct || skillsCLIExecutable != nil else { return }
+        installMethod = method
+        defaults.set(method.rawValue, forKey: Self.installMethodKey)
+    }
+
+    func chooseSkillsCLIExecutable() {
+        guard canEditRoots else { return }
+        let panel = NSOpenPanel()
+        panel.title = "skills CLI 실행 파일 선택"
+        panel.message = "설치된 skills 실행 파일을 선택하세요. 감지만으로 실행하거나 다운로드하지 않습니다."
+        panel.canChooseFiles = true; panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard skillsCLIService.detect(preferred: url) != nil else { settingsMessage = "실행 가능한 일반 파일을 선택하세요."; return }
+        defaults.set(url.path, forKey: Self.skillsCLIPathKey)
+        refreshSkillsCLI()
+    }
+
+    func prepareSkillsCLIInstallation(source: URL, agent: SkillAgent, remoteSource: URL?) async -> SkillsCLIInstallPlan? {
+        guard installMethod == .skillsCLI, canChangeFiles, mutationPreview == nil, let executable = skillsCLIExecutable else {
+            libraryMessage = "설정에서 skills CLI 실행 파일과 설치 방식을 확인하세요."; return nil
+        }
+        isPreparingChange = true
+        defer { isPreparingChange = false }
+        let service = skillsCLIService
+        do {
+            let plan = try await Task.detached(priority: .userInitiated) {
+                try service.prepare(folder: source, agent: agent, executable: executable, remoteSource: remoteSource)
+            }.value
+            libraryMessage = nil
+            return plan
+        } catch { libraryMessage = error.localizedDescription; return nil }
+    }
+
+    func presentSkillsCLIInstall(_ plan: SkillsCLIInstallPlan, download: GitHubSkillDownload?) {
+        guard installMethod == .skillsCLI, canChangeFiles, mutationPreview == nil else { download?.discard(); return }
+        skillsCLIDownload = download
+        skillsCLIOutput = nil; skillsCLIInstallFailed = false
+        skillsCLIInstallPreview = plan
+    }
+
+    func cancelSkillsCLIInstall() {
+        guard !isMutating else { return }
+        skillsCLIInstallPreview = nil
+        skillsCLIDownload?.discard(); skillsCLIDownload = nil
+    }
+
+    func applySkillsCLIInstall() async {
+        guard let plan = skillsCLIInstallPreview, !isMutating, !isScanning, !isPreparingChange,
+              !journalLoadFailed, !groupSyncFailed, journal.pending == nil, mutationPreview == nil,
+              !skillsCLIInstallFailed else { return }
+        isMutating = true
+        let service = skillsCLIService
+        var success = false
+        do {
+            skillsCLIOutput = try await Task.detached(priority: .userInitiated) { try service.apply(plan) }.value
+            libraryMessage = "skills CLI 설치를 완료했습니다. CLI가 설치 파일과 설치 기록을 관리합니다."
+            success = true
+        } catch {
+            skillsCLIInstallFailed = true
+            libraryMessage = error.localizedDescription
+        }
+        isMutating = false
+        if success {
+            cancelSkillsCLIInstall()
+            for root in plan.roots where !registeredRoots.contains(where: { $0.url.path == root.url.path }) && FileManager.default.fileExists(atPath: root.url.path) {
+                _ = addRoot(url: root.url, agent: root.agent, name: root.label)
+            }
+        }
+        await rescan()
+        if success {
+            page = .library; clearLibraryFilters()
+            selectedSkillID = skills.first { skill in skill.installations.contains { plan.expectedPaths.contains($0.originalPath) } }?.id
+        }
     }
 
     func prepareRemoval(_ installations: [SkillInstallation]) async {

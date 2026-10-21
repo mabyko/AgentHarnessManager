@@ -144,7 +144,13 @@ final class InstructionStore {
 @MainActor
 final class InstructionAppDelegate: NSObject, NSApplicationDelegate {
     weak var instructions: InstructionStore?
+    weak var store: AppStore?
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if store?.isMutating == true || store?.isPreparingChange == true {
+            store?.libraryMessage = "파일 변경을 마친 뒤 종료할 수 있습니다."
+            return .terminateCancel
+        }
+        store?.cancelSkillsCLIInstall()
         guard instructions?.hasDrafts == true else { return .terminateNow }
         let alert = NSAlert()
         alert.messageText = "저장하지 않은 지침 초안이 있습니다"

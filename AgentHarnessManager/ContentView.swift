@@ -8,6 +8,7 @@ struct ContentView: View {
     @State private var groupEditor: SkillGroup?
     @State private var showsInstaller = false
     @State private var installationPlan: MutationPlan?
+    @State private var preparedCLIInstall: (SkillsCLIInstallPlan, GitHubSkillDownload?)?
 
     var body: some View {
         @Bindable var store = store
@@ -98,8 +99,12 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showsInstaller, onDismiss: {
             if let plan = installationPlan { store.mutationPreview = plan; installationPlan = nil }
-        }) { SkillInstallSheet { installationPlan = $0 } }
+            if let pending = preparedCLIInstall { store.presentSkillsCLIInstall(pending.0, download: pending.1); preparedCLIInstall = nil }
+        }) {
+            SkillInstallSheet(onPrepared: { installationPlan = $0 }, onCLIPrepared: { preparedCLIInstall = ($0, $1) })
+        }
         .sheet(item: $groupEditor) { GroupEditor(group: $0) }
+        .sheet(item: $store.skillsCLIInstallPreview, onDismiss: { store.cancelSkillsCLIInstall() }) { SkillsCLIInstallReview(plan: $0) }
         .sheet(item: $store.mutationPreview, onDismiss: { store.cancelPreview() }) { MutationPreview(plan: $0) }
         .sheet(item: Binding(get: { store.instructions.preview }, set: { store.instructions.preview = $0 })) {
             InstructionChangeReview(plan: $0, editor: store.instructions)

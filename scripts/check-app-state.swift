@@ -9,6 +9,7 @@ struct AppStateCheck {
 
     @MainActor static func main() async throws {
         try await checkSkillLifecycle()
+        try await checkSkillsCLIInstallation()
         let files = FileManager.default
         let home = files.temporaryDirectory.appendingPathComponent("SkillAppCheck-\(UUID().uuidString)")
         let suite = "SkillAppCheck.\(UUID().uuidString)"
@@ -799,6 +800,52 @@ struct AppStateCheck {
         await store.applyPreview()
         check(store.skills.first?.id == id && store.skills.first?.isEnabled == true, "Undo removal must restore identity and state")
         print("PASS: reviewed local installation, cancellation cleanup, selection/filter reset, enabled removal and journal-backed restore")
+    }
+
+    @MainActor static func checkSkillsCLIInstallation() async throws {
+        let files = FileManager.default
+        let home = files.temporaryDirectory.appendingPathComponent("SkillsCLIState-" + UUID().uuidString).resolvingSymlinksInPath()
+        let suite = "SkillsCLIState." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { try? files.removeItem(at: home); defaults.removePersistentDomain(forName: suite) }
+        let source = home.appendingPathComponent("source")
+        let bin = home.appendingPathComponent("bin")
+        try files.createDirectory(at: source, withIntermediateDirectories: true)
+        try files.createDirectory(at: bin, withIntermediateDirectories: true)
+        try "---\nname: cli-example\ndescription: CLI fixture\n---\nBody".write(to: source.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        let executable = bin.appendingPathComponent("skills")
+        try """
+        #!/bin/sh
+        if [ "$1" = "--version" ]; then echo 1.7.4; exit 0; fi
+        mkdir -p "$HOME/.agents/skills/cli-example"
+        cp "$AHM_FIXTURE_SOURCE/SKILL.md" "$HOME/.agents/skills/cli-example/SKILL.md"
+        echo installed
+        """.write(to: executable, atomically: true, encoding: .utf8)
+        try files.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+        let service = SkillsCLIService(home: home, environment: ["AHM_FIXTURE_SOURCE": source.path],
+            detector: AgentInstallationDetector(executableDirectories: [bin, URL(fileURLWithPath: "/bin"), URL(fileURLWithPath: "/usr/bin")], applicationDirectories: []))
+        let store = AppStore(defaults: defaults, home: home, skillsCLIService: service)
+        await store.rescan()
+        check(store.installMethod == .direct && store.skillsCLIExecutable == executable)
+        store.setInstallMethod(.skillsCLI)
+        check(AppStore(defaults: defaults, home: home, skillsCLIService: service).installMethod == .skillsCLI, "Install method must persist")
+        guard let plan = await store.prepareSkillsCLIInstallation(source: source, agent: .codex, remoteSource: nil) else { check(false, store.libraryMessage ?? "CLI prepare failed"); return }
+        store.presentSkillsCLIInstall(plan, download: nil)
+        check(!store.metadataIsEditable && !store.canEditRoots && !store.canChangeFiles, "CLI review must lock other file changes")
+        store.cancelSkillsCLIInstall()
+        check(store.skills.isEmpty && store.canEditRoots, "Cancel must not install")
+        store.presentSkillsCLIInstall(plan, download: nil)
+        await store.applySkillsCLIInstall()
+        check(!store.skillsCLIInstallFailed && store.skillsCLIInstallPreview == nil && store.selectedSkill?.name == "cli-example", store.libraryMessage ?? "CLI install failed")
+        check(store.journal.completed.isEmpty, "External CLI install must not pretend to be an app-journal operation")
+        try files.removeItem(at: executable)
+        store.refreshSkillsCLI()
+        check(store.skillsCLIExecutable == nil && store.installMethod == .skillsCLI, "Missing CLI must preserve the user's choice")
+        let unavailable = await store.prepareSkillsCLIInstallation(source: source, agent: .codex, remoteSource: nil)
+        check(unavailable == nil, "Missing CLI must not silently fall back to direct installation")
+        store.setInstallMethod(.direct)
+        check(store.installMethod == .direct)
+        print("PASS: CLI detection, persisted install method, review locks/cancel, scoped CLI installation, selection and missing-CLI behavior")
     }
 
 }

@@ -9,7 +9,7 @@ struct AgentHarnessManagerApp: App {
     var body: some Scene {
         Window("Agent Harness Manager", id: "workbench") {
             ContentView()
-                .onAppear { appDelegate.instructions = store.instructions }
+                .onAppear { appDelegate.instructions = store.instructions; appDelegate.store = store }
                 .environment(store)
                 .preferredColorScheme(colorScheme)
                 .frame(minWidth: 960, minHeight: 640)

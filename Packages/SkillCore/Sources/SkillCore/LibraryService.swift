@@ -422,6 +422,12 @@ public actor LibraryService {
         }
     }
 
+    public static func fingerprintDirectory(_ url: URL) throws -> String {
+        let fd = try openDirectory(url.path)
+        defer { close(fd) }
+        return try hashTree(fd)
+    }
+
     private static func copySkill(_ source: Int32, to destination: Int32, depth: Int, entries: inout Int, bytes: inout Int) throws {
         guard depth <= 32 else { throw failure("스킬 폴더가 32단계를 넘습니다.") }
         var sourceInfo = stat()

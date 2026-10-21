@@ -62,6 +62,8 @@
 
 ## 2026-10-21 로컬 스킬 설치와 제거
 
+`SkillInstallMethod`는 기본 직접 설치와 선택 가능한 skills CLI를 구분하며 UserDefaults에 저장합니다. `SkillsCLIService`는 전역 실행 경로·기존 npx/bunx 캐시 또는 명시한 실행 파일을 확인하며 자동 다운로드하지 않습니다. 검토 준비 시 1.7.4 이상의 1.x 버전, 단일 스킬, 원본 지문, 대상 충돌과 버전 3 설치 기록을 확인합니다. `Process.arguments`로 `add <source> --global --agent <agent> --skill <name> --yes`를 실행하고 CLI 텔레메트리를 끕니다. GitHub 조회는 HEAD 커밋을 고정해 다운로드와 CLI의 tree URL에 함께 사용합니다. 실행 직전 실행 파일·원본·기록·대상을 재검증하고 실행 후 대상 문서를 확인합니다. CLI의 단일 에이전트 설치는 복사일 수 있으며 파일·설치 기록은 CLI가 관리합니다. 이 작업은 앱 저널 밖에서 수행하므로 자동 되돌리기를 제공하지 않고 실패 시 일부 변경을 그대로 표시합니다. 선택한 CLI가 없어져도 직접 설치로 우회하지 않습니다. 제거는 기존 앱 저널 보관 방식을 유지하며 CLI 설치 기록을 수정하지 않습니다.
+
 `planInstallation`은 사용자가 고른 단일 `SKILL.md` 폴더를 기본 루트 옆의 고유한 `.ahm-disabled-<UUID>` 준비 폴더에 복사합니다. 일반 파일·폴더만 허용하고 링크·특수 파일은 거절합니다. 원본과 복사본의 문서·폴더 지문을 비교한 뒤 검토용 `Move(operation: .install)`을 만듭니다. 포함 항목 10,000개·64 MiB·32단계 제한과 기존 `O_NOFOLLOW`·배타 rename·저널 복구를 재사용합니다. 검토 취소 시 준비 복사본을 제거합니다. 저널 저장 전 프로세스가 종료되면 참조되지 않은 준비 폴더가 남을 수 있으며 이를 자동 삭제하지 않습니다. 제공자 플러그인 설치를 대신하지 않습니다.
 
 `GitHubSkillService`는 공개 저장소의 [재귀 트리](https://docs.github.com/en/rest/git/trees)에서 SKILL.md 폴더를 찾고, 선택한 하위 트리의 [불변 Git blob](https://docs.github.com/en/rest/git/blobs)을 raw 형식으로 내려받습니다. 링크·서브모듈·경로 이탈·불완전한 트리·크기 초과를 거절하고 각 파일의 Git SHA-1과 바이트 수를 검증합니다. 쿠키·인증 저장소가 없는 ephemeral URLSession을 사용하며 실패·취소 시 임시 다운로드를 제거합니다. 다운로드한 일반 폴더는 같은 `planInstallation`으로 넘깁니다. 검토에는 저장소 출처를 표시하고 적용 후 기존 수동 출처 저장 기능으로 연결합니다. 공개 GitHub API의 인증 없는 조회 한도 오류는 안내하며 재시도나 인증 변경을 자동 실행하지 않습니다.

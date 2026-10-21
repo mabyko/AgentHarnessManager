@@ -63,6 +63,7 @@ struct SettingsView: View {
                     case .connections: AgentIntegrationSection()
                     case .paths: pathSections
                     case .general:
+                        installMethodSection
                         Section("화면") {
                             Picker("화면 모드", selection: $appearance) {
                                 Text("시스템 설정").tag("system")
@@ -80,6 +81,33 @@ struct SettingsView: View {
         .frame(minWidth: 840, minHeight: 580)
         .tint(WorkbenchTheme.accent)
         .task { if !store.hasScanned && !store.isScanning { await store.rescan() } }
+    }
+
+    private var installMethodSection: some View {
+        Section("스킬 설치") {
+            Picker("설치 방식", selection: Binding(get: { store.installMethod }, set: { store.setInstallMethod($0) })) {
+                Text("앱 직접 설치").tag(SkillInstallMethod.direct)
+                Text("skills CLI").tag(SkillInstallMethod.skillsCLI).disabled(store.skillsCLIExecutable == nil)
+            }.disabled(!store.canEditRoots).accessibilityIdentifier("settings.installMethod")
+            LabeledContent("skills CLI", value: store.skillsCLIExecutable == nil ? "감지되지 않음" : "실행 파일 감지됨")
+                .accessibilityIdentifier("settings.skillsCLIStatus")
+            if let executable = store.skillsCLIExecutable {
+                Text(executable.path).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+            HStack {
+                Button("다시 확인") { store.refreshSkillsCLI() }.disabled(!store.canEditRoots)
+                    .accessibilityIdentifier("settings.refreshSkillsCLI")
+                Button("실행 파일 선택…") { store.chooseSkillsCLIExecutable() }.disabled(!store.canEditRoots)
+            }
+            Text(store.installMethod == .skillsCLI
+                 ? "GitHub·로컬 설치를 감지된 skills CLI로 실행합니다. CLI가 설치 경로·복사 또는 링크·설치 기록을 관리하며 실행 전 명령과 경로를 검토합니다. CLI 1.7.4 이상의 1.x 버전이 필요합니다. 제거는 기존 앱의 복구 가능한 보관 방식을 유지합니다."
+                 : "앱이 파일을 복사하고 변경 이력으로 복구합니다. skills CLI 설치 기록은 변경하지 않습니다.")
+                .font(.caption).foregroundStyle(.secondary)
+            if store.skillsCLIExecutable == nil {
+                Text("전역 설치 또는 기존 npx·bunx 캐시에서 skills 실행 파일을 찾습니다. npx만 설치돼 있거나 CLI가 없어져도 자동 다운로드하거나 설치 방식을 바꾸지 않습니다.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 
     @ViewBuilder private var pathSections: some View {

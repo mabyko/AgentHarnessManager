@@ -10,6 +10,7 @@ public struct GitHubSkillCandidate: Identifiable, Hashable, Sendable {
 public struct GitHubSkillListing: Sendable {
     public let repository: SourceRepository
     public let skills: [GitHubSkillCandidate]
+    public let reference: String?
     let files: [GitHubTreeItem]
 }
 
@@ -47,12 +48,15 @@ public struct GitHubSkillService: Sendable {
         guard let repository = SourceRepository(input), repository.url.host == "github.com" else {
             throw Self.failure("공개 GitHub 저장소의 루트 주소를 입력하세요. 예: https://github.com/owner/repo")
         }
-        let url = endpoint(repository, path: "git/trees/HEAD?recursive=1")
+        struct Commit: Decodable { let sha: String }
+        let commit = try JSONDecoder().decode(Commit.self, from: await fetch(endpoint(repository, path: "commits/HEAD"), limit: 8 * 1_024 * 1_024))
+        guard Self.validSHA(commit.sha) else { throw Self.failure("GitHub 버전 정보를 확인할 수 없습니다.") }
+        let url = endpoint(repository, path: "git/trees/" + commit.sha + "?recursive=1")
         let data = try await fetch(url, limit: 8 * 1_024 * 1_024)
-        return try Self.parse(data, repository: repository)
+        return try Self.parse(data, repository: repository, reference: commit.sha)
     }
 
-    static func parse(_ data: Data, repository: SourceRepository) throws -> GitHubSkillListing {
+    static func parse(_ data: Data, repository: SourceRepository, reference: String? = nil) throws -> GitHubSkillListing {
         struct Tree: Decodable { let tree: [GitHubTreeItem]; let truncated: Bool }
         let response = try JSONDecoder().decode(Tree.self, from: data)
         guard !response.truncated, response.tree.count <= 100_000 else {
@@ -72,7 +76,7 @@ public struct GitHubSkillService: Sendable {
         }.filter { !$0.name.hasPrefix(".") }.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
         guard !skills.isEmpty else { throw failure("이 저장소에서 설치 가능한 SKILL.md를 찾지 못했습니다.") }
         guard skills.count <= 1_000 else { throw failure("스킬이 1,000개를 넘습니다. 더 작은 저장소를 선택하세요.") }
-        return GitHubSkillListing(repository: repository, skills: skills, files: response.tree)
+        return GitHubSkillListing(repository: repository, skills: skills, reference: reference, files: response.tree)
     }
 
     public func download(_ skill: GitHubSkillCandidate, from listing: GitHubSkillListing) async throws -> GitHubSkillDownload {
