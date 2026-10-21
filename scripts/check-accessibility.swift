@@ -40,8 +40,8 @@ import SwiftUI
             guard depth < 24 else { return [] }
             return [root] + (value(root, "AXChildren") as? [AXUIElement] ?? []).flatMap { elements($0, depth: depth + 1) }
         }
-        func wait(_ message: String, _ predicate: () -> Bool) {
-            let deadline = Date().addingTimeInterval(5)
+        func wait(_ message: String, timeout: TimeInterval = 5, _ predicate: () -> Bool) {
+            let deadline = Date().addingTimeInterval(timeout)
             while Date() < deadline { if predicate() { return }; Thread.sleep(forTimeInterval: 0.05) }
             check(false, message)
         }
@@ -128,6 +128,9 @@ import SwiftUI
 
         let library = find("a11y.library")
         check(AXUIElementPerformAction(library, "AXRaise" as CFString) == .success)
+        _ = AXUIElementSetAttributeValue(library, "AXMain" as CFString, kCFBooleanTrue)
+        NSRunningApplication(processIdentifier: process.processIdentifier)!.activate()
+        Thread.sleep(forTimeInterval: 0.3)
         let navigation = ["sidebar.skills", "sidebar.instructions", "sidebar.activity"]
         let navigationLabels = ["스킬 라이브러리", "전역 지침", "활동 이력"]
         let sidebarIDs = Set(elements(library).map { string($0, "AXIdentifier") }.filter { $0.hasPrefix("sidebar.") })
@@ -205,6 +208,7 @@ import SwiftUI
         expectText("로컬 검사 ·")
         selectSegment("workbench.skillSection", "스킬")
         _ = find("library.scope")
+        press("library.filters")
         press("library.agent")
         wait("Installed agent filter options did not open") { elements(app).contains { string($0, "AXRole") == "AXMenuItem" && string($0, "AXTitle") == "Codex" } }
         let agentOptions = elements(app).filter { string($0, "AXRole") == "AXMenuItem" }.map { string($0, "AXTitle") }
@@ -222,9 +226,38 @@ import SwiftUI
             string(find("library.group"), "AXValue").contains("모든 그룹") &&
             (value(find("library.clearFilters"), "AXEnabled") as? Bool) == false
         }
+        key(53)
+        press("library.install", expecting: "library.installRoot")
+        wait("Install action must open a native sheet") { elements(app).contains { string($0, "AXRole") == "AXSheet" } }
+        let checksGitHub = ProcessInfo.processInfo.environment["AHM_CHECK_GITHUB"] == "1"
+        if checksGitHub {
+            check(AXUIElementSetAttributeValue(find("library.githubURL"), "AXValue" as CFString,
+                "https://github.com/mattpocock/skills" as CFString) == .success, "Repository field must accept a GitHub URL")
+            press("library.loadGitHub")
+            var row: AXUIElement?
+            wait("GitHub skill list did not load", timeout: 20) {
+                row = elements(app).first { element in
+                    string(element, "AXRole") == "AXRow" && elements(element).contains { string($0, "AXValue") == "codebase-design" }
+                }
+                return row != nil
+            }
+            check(AXUIElementSetAttributeValue(row!, "AXSelected" as CFString, kCFBooleanTrue) == .success, "GitHub skill must be selectable")
+            wait("Selected GitHub skill must enable installation review") { (value(find("library.prepareInstall"), "AXEnabled") as? Bool) == true }
+        }
+        try Data().write(to: home.appendingPathComponent("capture.install"))
+        wait("Install sheet was not captured") { FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.install.done").path) }
+        if checksGitHub {
+            press("library.prepareInstall")
+            wait("GitHub install must reach the final review sheet", timeout: 20) {
+                elements(app).contains { string($0, "AXIdentifier") == "library.applyChange" }
+            }
+            check(elements(app).contains { string($0, "AXValue").contains("출처: https://github.com/mattpocock/skills") }, "Review must show the GitHub source")
+        }
+        key(53)
+        wait("Escape must cancel installation") { !elements(app).contains { string($0, "AXRole") == "AXSheet" } }
         try Data().write(to: home.appendingPathComponent("capture.layout"))
         wait("Workbench layout screenshots were not captured") { FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.layout.done").path) }
-        print("PASS: native AX agent names/states and actions; task-only sidebar Tab/Shift-Tab/Space; segmented skills/instructions/activity navigation; installed-agent and combined group filters/reset; group-sheet focus/Escape; full-window layout captures in /tmp/ahm-workbench-layout-*.png")
+        print("PASS: native AX agent names/states and actions; task-only sidebar Tab/Shift-Tab/Space; segmented skills/instructions/activity navigation; installed-agent and combined group filters/reset; group/install-sheet focus/Escape; optional GitHub selection/download/review; full-window layout captures in /tmp/ahm-workbench-layout-*.png")
         print("NOT CHECKED: spoken VoiceOver output and global all-controls Tab traversal; system settings unchanged")
     }
 
@@ -236,6 +269,11 @@ import SwiftUI
             let folder = home.appendingPathComponent(path)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             try "---\nname: \(folder.lastPathComponent)\ndescription: Synthetic accessibility fixture\n---\nRead only test content.\n".write(to: folder.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        }
+        for path in [".claude/skills/keyboard-demo", ".grok/skills/keyboard-demo"] {
+            let link = home.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: home.appendingPathComponent(".agents/skills/keyboard-demo"))
         }
         let defaults = UserDefaults(suiteName: suite)!
         let bin = home.appendingPathComponent("bin")
@@ -269,6 +307,24 @@ import SwiftUI
                 fputs("FAIL: Could not seed the isolated keyboard group\n", stderr); exit(1)
             }
             while !FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.layout").path) {
+                if FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.install").path),
+                   !FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.install.done").path),
+                   let sheet = library.attachedSheet, let view = sheet.contentView {
+                    let output = URL(fileURLWithPath: "/tmp/ahm-skill-install.png")
+                    var captured = false
+                    if CGPreflightScreenCaptureAccess() {
+                        let capture = Process()
+                        capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                        capture.arguments = ["-x", "-o", "-l", String(sheet.windowNumber), output.path]
+                        do { try capture.run(); capture.waitUntilExit(); captured = capture.terminationStatus == 0 }
+                        catch { print("Sheet screenshot unavailable:", error.localizedDescription) }
+                    }
+                    if !captured, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                        view.cacheDisplay(in: view.bounds, to: bitmap)
+                        try? bitmap.representation(using: .png, properties: [:])?.write(to: output)
+                    }
+                    try? Data().write(to: home.appendingPathComponent("capture.install.done"))
+                }
                 try? await Task.sleep(for: .milliseconds(100))
             }
             store.selectedSkillID = store.filteredSkills.first?.id

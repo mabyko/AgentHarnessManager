@@ -756,16 +756,70 @@ extension AppStore {
             }
         }
         isMutating = true
+        var applied = false
         do {
             try await libraryService.apply(plan, roots: registeredRoots)
+            applied = true
             selectedMutationID = plan.id
             libraryMessage = plan.undoes == nil ? "변경을 완료했습니다. 변경 이력에서 확인할 수 있습니다." : "되돌리기를 완료했습니다. 원래 작업과 실행 기록을 함께 보존했습니다."
             mutationPreview = nil
-        } catch { libraryMessage = error.localizedDescription; mutationPreview = nil }
+        } catch {
+            libraryMessage = error.localizedDescription
+            if let latest = try? await libraryService.load(roots: registeredRoots), latest.pending == nil {
+                LibraryService.discardInstallation(plan)
+            }
+            mutationPreview = nil
+        }
         isMutating = false
         await rescan()
+        if applied, let id = selectedSkillID, !skills.contains(where: { $0.id == id }) { selectedSkillID = nil }
+        if applied, plan.undoes == nil, let installed = plan.installations.first(where: { $0.operation == .install }) {
+            page = .library
+            clearLibraryFilters()
+            selectedSkillID = skills.first { $0.installations.contains { $0.originalPath == installed.destination } }?.id
+            if let repository = installed.sourceRepository,
+               let entry = selectedSkill?.installations.first(where: { $0.originalPath == installed.destination })?.entry {
+                _ = saveSource(for: entry, input: repository)
+            }
+        }
     }
-    func cancelPreview() { mutationPreview = nil }
+    func cancelPreview() {
+        guard let plan = mutationPreview else { return }
+        mutationPreview = nil
+        LibraryService.discardInstallation(plan)
+    }
+
+    func prepareInstallation(source: URL, root: DiscoveryRoot, repository: SourceRepository? = nil) async -> MutationPlan? {
+        guard canChangeFiles, mutationPreview == nil else { return nil }
+        isPreparingChange = true
+        defer { isPreparingChange = false }
+        let managed = automaticRoots
+        do {
+            let plan = try await Task.detached(priority: .userInitiated) {
+                let prepared = try LibraryService.planInstallation(source: source, root: root, managedRoots: managed)
+                return MutationPlan(title: prepared.title, installations: prepared.installations.map {
+                    var move = $0; move.sourceRepository = repository?.id; return move
+                })
+            }.value
+            libraryMessage = nil
+            return plan
+        } catch { libraryMessage = error.localizedDescription; return nil }
+    }
+
+    func prepareRemoval(_ installations: [SkillInstallation]) async {
+        guard canChangeFiles, mutationPreview == nil else { return }
+        isPreparingChange = true
+        defer { isPreparingChange = false }
+        let all = allInstallations, managed = automaticRoots, roots = registeredRoots
+        do {
+            mutationPreview = try await Task.detached(priority: .userInitiated) {
+                try LibraryService.planRemoval(installations: installations, allInstallations: all,
+                    managedRoots: managed, protectedRoots: roots)
+            }.value
+            libraryMessage = nil
+        } catch { libraryMessage = error.localizedDescription }
+    }
+
 
     var selectedAgentRequest: AgentChangeRequest? { agentRequests.first { $0.id == selectedAgentRequestID } }
     var filteredAgentRequests: [AgentChangeRequest] { agentRequests.filter { matchesSearch($0.title + " " + $0.id.uuidString) } }

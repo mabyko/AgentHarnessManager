@@ -8,9 +8,11 @@ A native macOS library for agent skills, built with SwiftUI. Browse skills and t
 
 ## What works today
 
-- Browse registered skill folders using summary filters, agent and location filters, repository sources, search, and a link-only filter.
+- Browse registered skill folders with a view menu and a unified filter popover for agents, groups, locations, sources, and links. Active conditions and result counts remain above the list.
 - Inspect a logical skill and its installations together. A discovered direct source and links to it share a row; independent same-name copies remain separate. “Variants” compares readable `SKILL.md` hashes for same-name skills, not their entire resource directories.
-- Read original documents, inspect installation paths and provenance, and save favorites.
+- Read original documents, inspect installation paths and provenance, and save favorites. Installation cards show agents and state first; paths, sources, and the original document expand on demand.
+- Install from a public GitHub repository URL or a local folder containing `SKILL.md` using **설치…**. GitHub installation lists skills, downloads the selected folder using immutable file hashes, verifies the bytes, and connects its source after applying. Review the destination before applying; preserve the original, reject collisions, and revalidate staged contents. Only regular files and directories are supported; symlinks and special files are rejected.
+- Remove enabled or disabled installations from the library through **설치 제거…** or an individual location. Recovery copies and journal records remain, and **활동 이력 → 변경** can restore the previous state. Shared sources, provider caches, and custom/nested roots remain protected. Permanent deletion and private GitHub authentication are not supported; downloaded private repositories can be installed as local folders.
 - Create, edit, and delete groups. Existing work configurations are imported once, with original notes and missing references preserved in the legacy view.
 - Switch groups together or turn other groups off. Overlapping members remain enabled for another active group; ungrouped skills are unaffected.
 - Enable or disable independent directories and healthy single-hop installation links directly inside the ten built-in discovery roots after a change preview. Shared source directories stay in place; nested/custom locations and protected provider caches remain read-only. Broken, indirect, or unapproved links are blocked. A fresh scan and identity/content checks run before applying changes.
@@ -59,7 +61,7 @@ Personal signing settings belong in the ignored `Config/Local.xcconfig`. See [CO
 ## Use it
 
 1. Open Settings (`⌘,`) → **스킬 경로** and choose an agent to inspect its default/shared roots or add a folder for browsing.
-2. Open **스킬 라이브러리** and combine the status, agent, and group menus above the list. Expand the path, source, and link filters when needed, or reset all filters. Select a skill to read its locations, groups, provenance, and original document on the right. Refresh with `⌘R` after external changes.
+2. Open **스킬 라이브러리** and use the view menu and **필터** button above the list. Combine agent, group, location, source, and link conditions in one popover, or reset them. Use **설치…** to load a GitHub repository and select a skill, or choose a local folder, then select the destination, then review and apply. Use **설치 제거…** in the detail header to review removal. Select a skill to read its locations, groups, provenance, and original document on the right. Refresh with `⌘R` after external changes.
 3. Open the library’s **그룹** section and create a group with “새 그룹”. Edit membership or request a group switch there; select whether other groups should remain enabled.
 4. Request a supported file switch, review every source and destination, then choose Apply. If interrupted, resolve any reported conflict and use “복구 재시도” to finish the recorded operation.
 5. Open **활동 이력 → 변경** to inspect recorded moves or choose “되돌리기 검토…” and review the inverse plan before applying it.
@@ -97,6 +99,10 @@ Source classification reads the optional version-3 [Vercel Skills installation r
 “설치 기록” means an installation receipt; “직접 연결” means a local user association. Neither verifies the current files against the remote repository. Installation counts include separate installed copies and links; logical-skill counts distinguish shared source rows. Neither is the number of skills available remotely. A mixed skill can appear in both On and Off filters. Manual associations are tied to the discovered installation identity; replacing a directory does not transfer its association. Removing a manual override restores the receipt source if one exists. Manual associations survive disable/restore. Automatic receipt provenance may be unavailable while a folder is in storage; it is verified again after restoration. Source selection and metadata edits do not change skill files.
 
 Legacy bundle IDs (`forked.agentskillmanager.local` and `.dev`) are retained to preserve existing settings after the rename. See [Config/Base.xcconfig](Config/Base.xcconfig).
+
+GitHub installation contacts the public GitHub API only when explicitly requested. It uses an ephemeral session without cookies or stored credentials, verifies immutable Git blob hashes, and downloads only the selected skill. Network/rate-limit failures discard partial downloads; a local-folder fallback remains available. Repository scripts and hooks are never executed.
+
+Local skill installation and removal use journal version 3 while continuing to read versions 1 and 2. Removed installations retain their recovery files and records but disappear from the library; removing an already-disabled item does not move it again. Undoing an installation removes its copy, and undoing removal restores its prior enabled/disabled state. Recovery files remain until explicitly managed outside the app; there is no permanent-delete action. A cancelled installation review discards its private staging copy. A crash before the plan reaches the journal can leave an unreferenced `.ahm-disabled-<UUID>` staging folder beside the discovery root. Older apps reject unsupported journal versions rather than discard metadata.
 
 ## Roadmap
 

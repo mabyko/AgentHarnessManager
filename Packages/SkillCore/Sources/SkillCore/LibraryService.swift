@@ -27,10 +27,18 @@ public struct DisabledInstallation: Codable, Identifiable, Equatable, Sendable {
     public let storageParentIdentity: DirectoryIdentity
     public let identity: DirectoryIdentity
     public var link: StoredLink? = nil
+    public var isRemoved: Bool? = nil
     public var readRoot: DiscoveryRoot { DiscoveryRoot(agent: location.agent, url: URL(fileURLWithPath: currentPath), label: location.label) }
     public var matchesCurrentItem: Bool {
         var info = stat()
         return lstat(currentPath, &info) == 0 && info.st_mode & S_IFMT == (link == nil ? S_IFDIR : S_IFLNK) && identity.matches(info)
+    }
+}
+
+public enum InstallationOperation: String, Codable, Sendable {
+    case install, remove, hide, unhide
+    var reversed: Self {
+        switch self { case .install: .remove; case .remove: .install; case .hide: .unhide; case .unhide: .hide }
     }
 }
 
@@ -39,6 +47,10 @@ public struct Move: Codable, Identifiable, Equatable, Sendable {
     public let enabled: Bool
     public let contentHash: String
     public var treeHash: String? = nil
+    public var operation: InstallationOperation? = nil
+    public var sourceRepository: String? = nil
+    public var changesLocation: Bool { operation != .hide && operation != .unhide }
+    public var removesFromLibrary: Bool { operation == .remove || operation == .hide }
     public var id: String { installation.id }
     public var source: String { enabled ? installation.currentPath : installation.originalPath }
     public var destination: String { enabled ? installation.originalPath : installation.currentPath }
@@ -320,6 +332,165 @@ public actor LibraryService {
         return plan
     }
 
+    public static func planRemoval(installations: [SkillInstallation], allInstallations: [SkillInstallation],
+                                   managedRoots: [DiscoveryRoot], protectedRoots: [DiscoveryRoot]) throws -> MutationPlan {
+        var moves: [Move] = []
+        for item in installations {
+            if let reason = readOnlyReason(for: item, allInstallations: allInstallations, managedRoots: managedRoots) {
+                throw failure(reason)
+            }
+            if item.isEnabled {
+                let plan = try plan(title: "제거", installations: [item], enabled: false,
+                                    allInstallations: allInstallations, managedRoots: managedRoots, protectedRoots: protectedRoots)
+                moves += plan.installations.map {
+                    var move = $0; move.operation = .remove; return move
+                }
+            } else {
+                let plan = try plan(title: "제거", installations: [item], enabled: true,
+                                    allInstallations: allInstallations, managedRoots: managedRoots, protectedRoots: protectedRoots)
+                moves += plan.installations.map {
+                    Move(installation: $0.installation, enabled: false, contentHash: $0.contentHash,
+                         treeHash: $0.treeHash, operation: .hide)
+                }
+            }
+        }
+        return MutationPlan(title: "스킬 제거 · \(installations.count)개 설치 위치", installations: moves)
+    }
+
+    /// Copy a user-selected skill to private staging; the journal performs the final atomic installation.
+    public static func planInstallation(source: URL, root: DiscoveryRoot, managedRoots: [DiscoveryRoot]) throws -> MutationPlan {
+        guard managedRoots.contains(root), source.isFileURL else { throw failure("기본 설치 위치와 로컬 스킬 폴더를 선택하세요.") }
+        guard !root.url.path.split(separator: "/").contains(where: { ["plugins", "cache", "marketplaces", ".system"].contains(String($0)) }) else {
+            throw failure("제공자가 관리하는 캐시와 시스템 경로에는 설치할 수 없습니다.")
+        }
+        let name = source.lastPathComponent
+        guard !name.isEmpty, !name.hasPrefix("."), !name.contains("/"), name.utf8.count <= 200 else {
+            throw failure("스킬 폴더 이름을 확인하세요. 숨김 폴더는 설치할 수 없습니다.")
+        }
+        let input = try openDirectory(source.path)
+        defer { close(input) }
+        let hash = try hashDocument(input), tree = try hashTree(input)
+        let sourcePath = source.resolvingSymlinksInPath().path
+        let storagePath = root.url.deletingLastPathComponent().resolvingSymlinksInPath().path
+        guard storagePath != sourcePath, !storagePath.hasPrefix(sourcePath + "/") else {
+            throw failure("원본 폴더 안에는 설치 준비 위치를 만들 수 없습니다. 별도의 스킬 폴더를 선택하세요.")
+        }
+        let parent = try openDirectory(root.url.path, create: true)
+        defer { close(parent) }
+        var marker = stat(), parentInfo = stat(), storageInfo = stat(), childInfo = stat()
+        guard fstatat(parent, "SKILL.md", &marker, AT_SYMLINK_NOFOLLOW) != 0, errno == ENOENT else {
+            throw failure("설치 위치 자체가 스킬 폴더입니다. 다른 위치를 선택하세요.")
+        }
+        guard fstatat(parent, name, &marker, AT_SYMLINK_NOFOLLOW) != 0, errno == ENOENT else {
+            throw failure("같은 이름의 설치가 이미 있습니다. 기존 파일은 덮어쓰지 않습니다.")
+        }
+        let storageURL = root.url.deletingLastPathComponent()
+        let storage = try openDirectory(storageURL.path)
+        defer { close(storage) }
+        let stageName = ".ahm-disabled-" + UUID().uuidString
+        guard mkdirat(storage, stageName, 0o700) == 0 else { throw failure("설치 준비 폴더를 만들 수 없습니다.") }
+        let stageURL = storageURL.appendingPathComponent(stageName)
+        var retained = false
+        defer { if !retained { try? FileManager.default.removeItem(at: stageURL) } }
+        let output = openat(storage, stageName, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard output >= 0 else { throw failure("설치 준비 폴더를 열 수 없습니다.") }
+        defer { close(output) }
+        var entries = 0, bytes = 0
+        try copySkill(input, to: output, depth: 0, entries: &entries, bytes: &bytes)
+        guard try hashTree(input) == tree, try hashTree(output) == tree,
+              fstat(parent, &parentInfo) == 0, fstat(storage, &storageInfo) == 0, fstat(output, &childInfo) == 0,
+              let physical = LibraryCatalog.physicalPath(root.url.path),
+              let physicalStorage = LibraryCatalog.physicalPath(storageURL.path) else {
+            throw failure("복사 중 원본이나 설치 위치가 변경되었습니다. 다시 시도하세요.")
+        }
+        let original = root.url.appendingPathComponent(name).path
+        let saved = DisabledInstallation(id: LibraryCatalog.digest(UUID().uuidString), name: name, originalPath: original,
+            currentPath: stageURL.path, location: root, physicalParent: physical, parentIdentity: DirectoryIdentity(parentInfo),
+            physicalStorageParent: physicalStorage, storageParentIdentity: DirectoryIdentity(storageInfo), identity: DirectoryIdentity(childInfo))
+        let move = Move(installation: saved, enabled: true, contentHash: hash, treeHash: tree, operation: .install)
+        try validate(move, roots: managedRoots, allowCompleted: false)
+        guard fsync(storage) == 0 else { throw failure("설치 준비 위치를 디스크에 기록하지 못했습니다.") }
+        retained = true
+        return MutationPlan(title: "스킬 설치 · " + name, installations: [move])
+    }
+
+    public static func discardInstallation(_ plan: MutationPlan) {
+        guard plan.undoes == nil else { return }
+        for move in plan.installations where move.operation == .install && move.enabled
+            && validPaths(move.installation, roots: [move.installation.location]) && move.installation.matchesCurrentItem {
+            try? FileManager.default.removeItem(atPath: move.installation.currentPath)
+        }
+    }
+
+    private static func copySkill(_ source: Int32, to destination: Int32, depth: Int, entries: inout Int, bytes: inout Int) throws {
+        guard depth <= 32 else { throw failure("스킬 폴더가 32단계를 넘습니다.") }
+        var sourceInfo = stat()
+        guard fstat(source, &sourceInfo) == 0 else { throw failure("원본 폴더를 읽을 수 없습니다.") }
+        let listing = openat(source, ".", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard listing >= 0, let stream = fdopendir(listing) else { throw failure("원본 목록을 읽을 수 없습니다.") }
+        defer { closedir(stream) }
+        while true {
+            errno = 0
+            guard let entry = readdir(stream) else {
+                guard errno == 0 else { throw failure("원본 목록을 끝까지 읽을 수 없습니다.") }
+                break
+            }
+            let name = withUnsafeBytes(of: entry.pointee.d_name) { raw in
+                raw.firstIndex(of: 0).flatMap { String(bytes: raw.prefix($0), encoding: .utf8) }
+            }
+            guard let name else { throw failure("파일 이름이 UTF-8이 아닙니다.") }
+            if name == "." || name == ".." { continue }
+            entries += 1
+            guard entries <= 10_000 else { throw failure("스킬 항목이 10,000개를 넘습니다.") }
+            var info = stat()
+            guard fstatat(source, name, &info, AT_SYMLINK_NOFOLLOW) == 0 else { throw failure("원본 항목이 변경되었습니다.") }
+            switch info.st_mode & S_IFMT {
+            case S_IFDIR:
+                let child = openat(source, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+                guard child >= 0 else { throw failure("원본 폴더를 열 수 없습니다.") }
+                defer { close(child) }
+                guard mkdirat(destination, name, 0o700) == 0 else { throw failure("하위 폴더를 만들 수 없습니다.") }
+                let output = openat(destination, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+                guard output >= 0 else { throw failure("하위 폴더를 열 수 없습니다.") }
+                defer { close(output) }
+                try copySkill(child, to: output, depth: depth + 1, entries: &entries, bytes: &bytes)
+            case S_IFREG:
+                guard info.st_size >= 0, info.st_size <= 64 * 1_024 * 1_024 - bytes else { throw failure("스킬이 64 MiB 한도를 넘습니다.") }
+                bytes += Int(info.st_size)
+                let file = openat(source, name, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
+                guard file >= 0 else { throw failure("원본 파일을 열 수 없습니다.") }
+                defer { close(file) }
+                var opened = stat()
+                guard fstat(file, &opened) == 0, opened.st_mode & S_IFMT == S_IFREG,
+                      opened.st_dev == info.st_dev, opened.st_ino == info.st_ino else { throw failure("원본 파일이 교체되었습니다.") }
+                let output = openat(destination, name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
+                guard output >= 0 else { throw failure("설치 파일을 만들 수 없습니다.") }
+                defer { close(output) }
+                var buffer = [UInt8](repeating: 0, count: 16_384), total = 0
+                while true {
+                    let count = buffer.withUnsafeMutableBytes { Darwin.read(file, $0.baseAddress, $0.count) }
+                    if count < 0 && errno == EINTR { continue }
+                    guard count >= 0 else { throw failure("원본 파일 읽기에 실패했습니다.") }
+                    if count == 0 { break }
+                    total += count
+                    guard total <= info.st_size else { throw failure("원본 파일이 변경되었습니다.") }
+                    try buffer.withUnsafeBytes { raw in
+                        var offset = 0
+                        while offset < count {
+                            let written = Darwin.write(output, raw.baseAddress!.advanced(by: offset), count - offset)
+                            if written < 0 && errno == EINTR { continue }
+                            guard written > 0 else { throw failure("설치 파일 저장에 실패했습니다.") }
+                            offset += written
+                        }
+                    }
+                }
+                guard total == info.st_size, fchmod(output, info.st_mode & 0o777) == 0, fsync(output) == 0 else { throw failure("설치 파일을 확인할 수 없습니다.") }
+            default: throw failure("로컬 설치는 일반 파일과 폴더만 지원합니다. 심볼릭 링크와 특수 파일은 제외해 주세요.")
+            }
+        }
+        guard fchmod(destination, sourceInfo.st_mode & 0o777) == 0, fsync(destination) == 0 else { throw failure("설치 폴더를 저장할 수 없습니다.") }
+    }
+
     public func load(roots: [DiscoveryRoot]) throws -> LibraryJournal {
         try locked { directory in
             let journal = try readJournal(directory)
@@ -351,9 +522,16 @@ public actor LibraryService {
                 }
             }
             guard !plan.installations.isEmpty || plan.groupSelection != nil else { return }
-            for move in plan.installations { try Self.validate(move, roots: roots, allowCompleted: false) }
+            for move in plan.installations {
+                if !move.changesLocation {
+                    guard journal.disabled.contains(where: { $0.id == move.id && $0.identity == move.installation.identity }),
+                          !move.enabled else { throw Self.failure("보관 항목이 변경되었습니다. 다시 검토해 주세요.") }
+                }
+                try Self.validate(move, roots: roots, allowCompleted: !move.changesLocation)
+            }
             try Self.checkReaders(plan, roots: roots, disabled: journal.disabled)
-            if plan.installations.contains(where: { $0.installation.link != nil }) { journal.version = 2 }
+            if plan.installations.contains(where: { $0.operation != nil }) { journal.version = 3 }
+            else if journal.version < 2, plan.installations.contains(where: { $0.installation.link != nil }) { journal.version = 2 }
             journal.pending = plan
             try writeJournal(journal, directory: directory)
             try finish(&journal, directory: directory, roots: roots)
@@ -365,7 +543,7 @@ public actor LibraryService {
             let journal = try readJournal(directory)
             try validateJournal(journal, roots: roots)
             let plan = try Self.undoPlan(id: id, journal: journal)
-            for move in plan.installations { try Self.validate(move, roots: roots, allowCompleted: false) }
+            for move in plan.installations { try Self.validate(move, roots: roots, allowCompleted: !move.changesLocation) }
             try Self.checkReaders(plan, roots: roots, disabled: journal.disabled)
             return plan
         }
@@ -375,7 +553,7 @@ public actor LibraryService {
         if let reason = journal.undoUnavailableReason(for: id) { throw failure(reason) }
         guard let original = journal.completed.first(where: { $0.id == id }) else { throw failure("완료 기록을 찾을 수 없습니다.") }
         let moves = original.installations.reversed().map {
-            Move(installation: $0.installation, enabled: !$0.enabled, contentHash: $0.contentHash, treeHash: $0.treeHash)
+            Move(installation: $0.installation, enabled: $0.changesLocation ? !$0.enabled : $0.enabled, contentHash: $0.contentHash, treeHash: $0.treeHash, operation: $0.operation?.reversed, sourceRepository: $0.sourceRepository)
         }
         let selection = original.groupSelection.map {
             GroupSelectionChange(before: $0.after, after: $0.before, previousChangeID: journal.groupSelection?.id)
@@ -397,7 +575,7 @@ public actor LibraryService {
         // Revalidate the entire remainder before resuming any operation. Existing files are never overwritten.
         for move in plan.installations { try Self.validate(move, roots: roots, allowCompleted: true) }
         try Self.checkReaders(plan, roots: roots, disabled: journal.disabled)
-        for move in plan.installations {
+        for move in plan.installations where move.changesLocation {
             let fd = try Self.openDirectory(move.installation.physicalParent)
             defer { close(fd) }
             let storage = try Self.openDirectory(move.installation.physicalStorageParent)
@@ -418,7 +596,11 @@ public actor LibraryService {
         }
         for move in plan.installations {
             journal.disabled.removeAll { $0.id == move.id }
-            if !move.enabled { journal.disabled.append(move.installation) }
+            if !move.enabled {
+                var saved = move.installation
+                saved.isRemoved = move.removesFromLibrary
+                journal.disabled.append(saved)
+            }
         }
         var completed = plan
         completed.completedAt = .now
@@ -435,7 +617,10 @@ public actor LibraryService {
             var info = stat()
             let saved = move.installation
             if lstat(saved.currentPath, &info) == 0 && saved.identity.matches(info) {
-                result.disabled.removeAll { $0.id == saved.id }; result.disabled.append(saved)
+                result.disabled.removeAll { $0.id == saved.id }
+                var observed = saved
+                observed.isRemoved = move.removesFromLibrary
+                result.disabled.append(observed)
             } else if lstat(saved.originalPath, &info) == 0 && saved.identity.matches(info) {
                 result.disabled.removeAll { $0.id == saved.id }
             }
@@ -444,7 +629,7 @@ public actor LibraryService {
     }
 
     private func validateJournal(_ journal: LibraryJournal, roots: [DiscoveryRoot]) throws {
-        guard [1, 2].contains(journal.version), Set(journal.disabled.map(\.id)).count == journal.disabled.count,
+        guard [1, 2, 3].contains(journal.version), Set(journal.disabled.map(\.id)).count == journal.disabled.count,
               Set(journal.completed.map(\.id)).count == journal.completed.count,
               journal.pending.map({ Set($0.installations.map(\.id)).count == $0.installations.count }) ?? true else {
             throw Self.failure("변경 기록 형식을 확인할 수 없습니다. 기존 데이터를 보존하고 파일 변경을 잠갔습니다.")
@@ -455,12 +640,12 @@ public actor LibraryService {
     }
 
     private static func checkReaders(_ plan: MutationPlan, roots: [DiscoveryRoot], disabled: [DisabledInstallation]) throws {
-        guard plan.installations.contains(where: { !$0.enabled || $0.installation.link != nil }) else { return }
+        guard plan.installations.contains(where: { $0.changesLocation && (!$0.enabled || $0.installation.link != nil) }) else { return }
         let snapshot = SkillCatalog.scan(roots: roots)
         guard snapshot.roots.allSatisfy({ $0.status == .available || $0.status == .missing }) else {
             throw failure("공유 링크에 미치는 영향을 확인할 수 없습니다. 경로 문제를 해결한 뒤 다시 시도해 주세요.")
         }
-        for move in plan.installations where !move.enabled || move.installation.link != nil {
+        for move in plan.installations where move.changesLocation && (!move.enabled || move.installation.link != nil) {
             let source = (move.enabled ? move.installation.physicalStorageParent : move.installation.physicalParent)
                 + "/" + URL(fileURLWithPath: move.source).lastPathComponent
             if move.installation.link != nil {
@@ -499,6 +684,9 @@ public actor LibraryService {
 
     private static func validate(_ move: Move, roots: [DiscoveryRoot], allowCompleted: Bool) throws {
         let saved = move.installation
+        if let operation = move.operation {
+            guard move.enabled == (operation == .install) else { throw failure("설치 작업의 방향을 확인할 수 없습니다.") }
+        }
         guard validPaths(saved, roots: roots), LibraryCatalog.physicalPath(saved.location.url.path) == saved.physicalParent,
               LibraryCatalog.physicalPath(URL(fileURLWithPath: saved.currentPath).deletingLastPathComponent().path) == saved.physicalStorageParent else {
             throw failure("등록 경로가 바뀌었습니다. 변경을 멈췄습니다.")

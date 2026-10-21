@@ -6,6 +6,8 @@ struct ContentView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.openSettings) private var openSettings
     @State private var groupEditor: SkillGroup?
+    @State private var showsInstaller = false
+    @State private var installationPlan: MutationPlan?
 
     var body: some View {
         @Bindable var store = store
@@ -94,6 +96,9 @@ struct ContentView: View {
         .onChange(of: [store.search, store.libraryFilter.rawValue, store.groupFilterID?.uuidString ?? "", store.agentFilter?.rawValue ?? "", store.rootFilterID ?? "", store.sourceFilterID ?? "", String(store.linksOnly)]) { _, _ in
             if let id = store.selectedSkillID, !store.filteredSkills.contains(where: { $0.id == id }) { store.selectedSkillID = nil }
         }
+        .sheet(isPresented: $showsInstaller, onDismiss: {
+            if let plan = installationPlan { store.mutationPreview = plan; installationPlan = nil }
+        }) { SkillInstallSheet { installationPlan = $0 } }
         .sheet(item: $groupEditor) { GroupEditor(group: $0) }
         .sheet(item: $store.mutationPreview, onDismiss: { store.cancelPreview() }) { MutationPreview(plan: $0) }
         .sheet(item: Binding(get: { store.instructions.preview }, set: { store.instructions.preview = $0 })) {
@@ -113,6 +118,11 @@ struct ContentView: View {
                 Text(listTitle).font(.title2.weight(.semibold)).accessibilityIdentifier("workbench.listTitle")
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
+                if store.page == .library {
+                    Button { showsInstaller = true } label: { Label("설치…", systemImage: "plus") }
+                        .buttonStyle(.borderedProminent).disabled(!store.metadataIsEditable)
+                        .accessibilityIdentifier("library.install")
+                }
                 if store.page == .groups {
                     Button { groupEditor = SkillGroup() } label: { Label("새 그룹", systemImage: "plus") }
                         .labelStyle(.iconOnly).buttonStyle(.bordered)
@@ -177,7 +187,7 @@ struct ContentView: View {
             }
         }
         .listStyle(.inset).scrollContentBackground(.hidden)
-        .overlay { if store.filteredSkills.isEmpty { emptyList("스킬이 없습니다", description: store.hasFilters ? "검색어나 필터를 바꿔 보세요." : "설정에서 스킬 폴더를 확인하거나 추가하세요.") } }
+        .overlay { if store.filteredSkills.isEmpty { emptyList("스킬이 없습니다", description: store.hasFilters ? "검색어나 필터를 바꿔 보세요." : "위의 설치 버튼으로 스킬을 추가하세요. 기존 폴더는 설정에서 등록할 수 있습니다.") } }
     }
 
     private var agentRequestList: some View {
@@ -313,92 +323,101 @@ struct ContentView: View {
 
 private struct LibraryFilters: View {
     @Environment(AppStore.self) private var store
-    @State private var showsAdvancedFilters = false
+    @State private var showsFilters = false
 
     var body: some View {
         @Bindable var store = store
         VStack(alignment: .leading, spacing: 10) {
-            Grid(horizontalSpacing: 10, verticalSpacing: 8) {
-                GridRow {
-                    filterLabel("보기")
-                    Picker("보기", selection: $store.libraryFilter) {
-                        ForEach(LibraryFilter.allCases.filter { $0 != .findings }) { filter in
-                            Text("\(filter.title) · \(store.count(filter))").tag(filter)
-                        }
-                    }.labelsHidden().frame(maxWidth: .infinity).accessibilityLabel("스킬 보기").accessibilityIdentifier("library.scope")
-                        .help("보기별 개수는 전체 스킬 라이브러리 기준입니다.")
-                }
-                GridRow {
-                    filterLabel("에이전트")
-                    Picker("에이전트", selection: $store.agentFilter) {
-                        Text("모든 에이전트").tag(SkillAgent?.none)
-                        ForEach(menuAgents, id: \.self) { agent in
-                            Label { Text(agentTitle(agent)) } icon: { AgentIcon(agent: agent) }
-                                .tag(Optional(agent))
-                        }
-                    }.labelsHidden().frame(maxWidth: .infinity).accessibilityLabel("스킬 에이전트").accessibilityIdentifier("library.agent")
-                        .help(store.sidebarAgents.isEmpty ? "설치가 감지된 에이전트가 없습니다. 설정에서 설치 상태를 확인하세요." : "설치된 에이전트로 목록을 좁힙니다.")
-                }
-                GridRow {
-                    filterLabel("그룹")
-                    Picker("그룹", selection: $store.groupFilterID) {
-                        Text("모든 그룹").tag(UUID?.none)
-                        ForEach(store.groups) { group in Text(group.name).tag(Optional(group.id)) }
-                    }.labelsHidden().frame(maxWidth: .infinity).accessibilityLabel("스킬 그룹").accessibilityIdentifier("library.group")
-                }
-            }.pickerStyle(.menu)
-
-            DisclosureGroup(isExpanded: $showsAdvancedFilters) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Picker("설치 위치", selection: $store.rootFilterID) {
-                        Text("모든 설치 위치").tag(String?.none)
-                        ForEach(store.availableRoots) { Text($0.label).tag(Optional($0.id)) }
-                    }.pickerStyle(.menu).accessibilityLabel("설치 위치")
-                    Menu {
-                        Button("모든 출처") { store.sourceFilterID = nil }
-                        ForEach(store.sourceGroups) { group in Button(group.repository.name) { store.sourceFilterID = group.id } }
-                        Button("출처 미확인") { store.sourceFilterID = AppStore.unknownSourceID }
-                    } label: { Label(store.sourceTitle, systemImage: "shippingbox") }
-                        .lineLimit(1).accessibilityLabel("스킬 출처, \(store.sourceTitle)")
-                    Toggle("링크만", isOn: $store.linksOnly).toggleStyle(.checkbox)
-                }.padding(.top, 6)
-            } label: {
-                Text(advancedFilterCount == 0 ? "설치 위치·출처·링크" : "설치 위치·출처·링크 · \(advancedFilterCount)개 적용")
-                    .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Picker("보기", selection: $store.libraryFilter) {
+                    ForEach(LibraryFilter.allCases.filter { $0 != .findings }) { filter in
+                        Text("\(filter.title) · \(store.count(filter))").tag(filter)
+                    }
+                }.labelsHidden().accessibilityLabel("스킬 보기").accessibilityIdentifier("library.scope")
+                Spacer(minLength: 0)
+                Button { showsFilters.toggle() } label: {
+                    Label(filterCount == 0 ? "필터" : "필터 \(filterCount)", systemImage: "line.3.horizontal.decrease")
+                }.accessibilityIdentifier("library.filters")
+                    .popover(isPresented: $showsFilters, arrowEdge: .bottom) { filterPanel }
+            }.controlSize(.regular)
+            if filterCount > 0 {
+                Button { showsFilters = true } label: {
+                    Text(filterSummary).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                }.buttonStyle(.plain).font(.caption).foregroundStyle(.secondary)
+                    .accessibilityLabel("적용 중인 필터: " + filterSummary)
             }
-
             HStack {
                 Text("스킬 \(store.filteredSkills.count)개").font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("필터 초기화") { store.clearLibraryFilters() }
-                    .buttonStyle(.bordered).controlSize(.small)
-                    .disabled(!store.hasFilters)
-                    .accessibilityIdentifier("library.clearFilters")
+                if store.hasFilters {
+                    Button("필터 초기화") { store.clearLibraryFilters() }
+                        .buttonStyle(.plain).font(.caption)
+                        .accessibilityIdentifier("library.clearFilters")
+                }
             }
         }
     }
 
-    private var advancedFilterCount: Int {
-        (store.rootFilterID == nil ? 0 : 1) + (store.sourceFilterID == nil ? 0 : 1) + (store.linksOnly ? 1 : 0)
+    private var filterPanel: some View {
+        @Bindable var store = store
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("스킬 필터").font(.headline)
+                Spacer()
+                Button("완료") { showsFilters = false }.keyboardShortcut(.cancelAction)
+            }
+            Form {
+                Picker("에이전트", selection: $store.agentFilter) {
+                    Text("모든 에이전트").tag(SkillAgent?.none)
+                    ForEach(menuAgents, id: \.self) { agent in
+                        Label { Text(agentTitle(agent)) } icon: { AgentIcon(agent: agent) }.tag(Optional(agent))
+                    }
+                }.accessibilityIdentifier("library.agent")
+                Picker("그룹", selection: $store.groupFilterID) {
+                    Text("모든 그룹").tag(UUID?.none)
+                    ForEach(store.groups) { Text($0.name).tag(Optional($0.id)) }
+                }.accessibilityIdentifier("library.group")
+                Picker("설치 위치", selection: $store.rootFilterID) {
+                    Text("모든 설치 위치").tag(String?.none)
+                    ForEach(store.availableRoots) { Text($0.label).tag(Optional($0.id)) }
+                }.accessibilityIdentifier("library.root")
+                Picker("출처", selection: $store.sourceFilterID) {
+                    Text("모든 출처").tag(String?.none)
+                    ForEach(store.sourceGroups) { Text($0.repository.name).tag(Optional($0.id)) }
+                    Text("출처 미확인").tag(Optional(AppStore.unknownSourceID))
+                }.accessibilityIdentifier("library.source")
+                Toggle("설치 링크만 보기", isOn: $store.linksOnly).toggleStyle(.checkbox)
+            }.pickerStyle(.menu)
+            Divider()
+            HStack {
+                Text("일치하는 스킬 \(store.filteredSkills.count)개").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button("필터 초기화") { store.clearLibraryFilters() }
+                    .disabled(!store.hasFilters).accessibilityIdentifier("library.clearFilters")
+            }
+        }.padding(20).frame(width: 340)
     }
 
+    private var filterCount: Int {
+        [store.agentFilter != nil, store.groupFilterID != nil, store.rootFilterID != nil,
+         store.sourceFilterID != nil, store.linksOnly].filter { $0 }.count
+    }
+    private var filterSummary: String {
+        [store.agentFilter.map { agentTitle($0) }, store.groups.first { $0.id == store.groupFilterID }?.name,
+         store.availableRoots.first { $0.id == store.rootFilterID }?.label,
+         store.sourceFilterID == nil ? nil : store.sourceTitle, store.linksOnly ? "설치 링크만" : nil]
+            .compactMap { $0 }.joined(separator: " · ")
+    }
     private var menuAgents: [SkillAgent] {
         let agents = store.sidebarAgents
         guard let selected = store.agentFilter, !agents.contains(selected) else { return agents }
         return agents + [selected]
     }
-
     private func agentTitle(_ agent: SkillAgent) -> String {
         if let target = AgentConnectionTarget(rawValue: agent.rawValue), store.agentInstallations[target]?.isInstalled == false {
             return "\(agent.displayName) (미설치)"
         }
         return agent.displayName
-    }
-
-    private func filterLabel(_ title: String) -> some View {
-        Text(title).font(.caption).foregroundStyle(.secondary)
-            .frame(width: 52, alignment: .leading)
-            .accessibilityHidden(true)
     }
 }
 
@@ -414,8 +433,7 @@ private struct SkillListRow: View {
                     if store.preferences.favorites.contains(skill.id) { Image(systemName: "star.fill").font(.caption).accessibilityLabel("즐겨찾기") }
                 }
                 Text(skill.summary).font(.caption).foregroundStyle(WorkbenchTheme.sidebarSecondary).lineLimit(2)
-                Text(skill.installations.map { $0.location.label }.joined(separator: " · ")).font(.caption2).foregroundStyle(WorkbenchTheme.sidebarSecondary).lineLimit(1)
-                HStack(spacing: 6) {
+                                HStack(spacing: 6) {
                     Text("설치 \(skill.installations.count)")
                     Text(stateTitle)
                     if skill.hasProblems { Label("확인 필요", systemImage: "exclamationmark.triangle") }

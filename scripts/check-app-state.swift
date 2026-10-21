@@ -8,6 +8,7 @@ struct AppStateCheck {
     }
 
     @MainActor static func main() async throws {
+        try await checkSkillLifecycle()
         let files = FileManager.default
         let home = files.temporaryDirectory.appendingPathComponent("SkillAppCheck-\(UUID().uuidString)")
         let suite = "SkillAppCheck.\(UUID().uuidString)"
@@ -760,6 +761,44 @@ struct AppStateCheck {
         precondition(defaults.data(forKey: "libraryPreferences.v1") == invalid && defaults.data(forKey: "review-history.v1") == invalid)
         precondition(defaults.data(forKey: "workProfiles") == originalData)
         print("PASS: canonical library, idempotent legacy migration and preserved notes/missing references, group CRUD, favorites, overlapping multiple/single activation, disable/restore identity, local review history, corrupt state preserved")
+    }
+
+    @MainActor static func checkSkillLifecycle() async throws {
+        let files = FileManager.default
+        let home = files.temporaryDirectory.appendingPathComponent("SkillLifecycle-" + UUID().uuidString)
+        let suite = "SkillLifecycle." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { try? files.removeItem(at: home); defaults.removePersistentDomain(forName: suite) }
+        let source = home.appendingPathComponent("downloads/example")
+        try files.createDirectory(at: source, withIntermediateDirectories: true)
+        try "---\nname: example\ndescription: Lifecycle fixture\n---\nBody".write(to: source.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        let store = AppStore(defaults: defaults, home: home)
+        await store.rescan()
+        let root = store.automaticRoots[0]
+        guard let cancelled = await store.prepareInstallation(source: source, root: root) else { check(false, "Must prepare local installation"); return }
+        check(store.mutationPreview == nil && store.skills.isEmpty, "Preparation must wait for the installer sheet to dismiss")
+        store.mutationPreview = cancelled
+        store.cancelPreview()
+        check(!files.fileExists(atPath: cancelled.installations[0].source), "Cancelling installation must discard staging")
+        guard let plan = await store.prepareInstallation(source: source, root: root, repository: SourceRepository("example/skills")) else { check(false); return }
+        store.search = "does not match"
+        store.mutationPreview = plan
+        await store.applyPreview()
+        check(store.skills.count == 1 && store.selectedSkill?.name == "example" && !store.hasFilters, "New installation must become selected and visible")
+        check(store.sourceRepository(for: store.selectedSkill!.installations[0])?.name == "example/skills", "GitHub source must be connected after installation")
+        let id = store.selectedSkill!.id
+        await store.prepareRemoval(store.allInstallations)
+        check(store.mutationPreview?.installations.first?.removesFromLibrary == true)
+        store.cancelPreview()
+        check(store.skills.count == 1, "Cancelling removal must leave installation untouched")
+        await store.prepareRemoval(store.allInstallations)
+        await store.applyPreview()
+        check(store.skills.isEmpty && store.journal.disabled.first?.isRemoved == true, "Removal must hide the installation and preserve recovery data")
+        let removal = store.journal.completed[0]
+        await store.prepareUndo(removal)
+        await store.applyPreview()
+        check(store.skills.first?.id == id && store.skills.first?.isEnabled == true, "Undo removal must restore identity and state")
+        print("PASS: reviewed local installation, cancellation cleanup, selection/filter reset, enabled removal and journal-backed restore")
     }
 
 }
