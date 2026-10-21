@@ -3,6 +3,10 @@ import SkillCore
 
 @main
 struct AppStateCheck {
+    private static func check(_ condition: Bool, _ message: String = "State regression check") {
+        guard condition else { fputs("FAIL: " + message + "\n", stderr); exit(1) }
+    }
+
     @MainActor static func main() async throws {
         let files = FileManager.default
         let home = files.temporaryDirectory.appendingPathComponent("SkillAppCheck-\(UUID().uuidString)")
@@ -22,6 +26,33 @@ struct AppStateCheck {
         let store = AppStore(defaults: defaults, home: home)
         await store.rescan()
         precondition(store.page == .library && store.entries.count == 2)
+        check(AppDestination.allCases == [.skills, .instructions, .activity])
+        for page in AppPage.allCases {
+            let expected: AppDestination = [.library, .findings, .groups].contains(page) ? .skills
+                : page == .instructions ? .instructions : .activity
+            check(page.destination == expected, "Every page must map to one of the three task destinations")
+        }
+        check(store.lastActivityPage == .history)
+        store.navigate(to: .activity)
+        check(store.page == .history)
+        store.page = .requests
+        store.navigate(to: .instructions)
+        check(store.page == .instructions && store.lastActivityPage == .requests)
+        store.navigate(to: .activity)
+        check(store.page == .requests, "Activity must return to its last section")
+        store.page = .changes
+        store.search = "retain activity search"
+        store.navigate(to: .activity)
+        check(store.page == .changes && store.search == "retain activity search",
+            "Clicking the current destination must preserve its section and search")
+        store.navigate(to: .skills)
+        check(store.page == .library && !store.hasFilters && store.lastActivityPage == .changes)
+        store.page = .profiles
+        store.navigate(to: .instructions)
+        store.navigate(to: .activity)
+        check(store.page == .history && store.lastActivityPage == .history,
+            "Activity must fall back to history when the remembered legacy profiles section is empty")
+        store.navigate(to: .skills)
         store.agentFilter = .opencode
         precondition(store.filteredEntries.count == 2 && store.filteredSkills.count == 2)
         store.rootFilterID = store.automaticRoots[0].id
@@ -177,7 +208,11 @@ struct AppStateCheck {
         }
         store.chooseAgent(.codex)
         app.page = .instructions
-        app.page = .library
+        for page in [AppPage.groups, .findings, .requests, .changes, .history, .profiles, .library] {
+            app.page = page
+            app.clearLibraryFilters()
+            check(store.text == "Draft\n" && store.hasDrafts, "Task navigation and filter clearing must preserve instruction drafts")
+        }
         check(store.text == "Draft\n" && store.hasDrafts, "Navigation must preserve instruction drafts")
         try "External\n".write(to: url, atomically: true, encoding: .utf8)
         await store.refresh()
@@ -194,7 +229,50 @@ struct AppStateCheck {
         guard let restore = store.preview else { throw NSError(domain: "Instruction restore", code: 1) }
         check(await store.apply(restore), "Restore instruction backup")
         check(try String(contentsOf: url, encoding: .utf8) == "External\n", "Restore must recover the prior contents")
-        print("PASS: instruction drafts, unsupported agents, navigation, external conflicts, reviewed writes and backup restore")
+        check(store.creationUndo == nil, "An existing instruction file must never expose creation undo")
+        store.chooseAgent(.grokBuild)
+        let createdURL = store.selectedDocument!.url
+        check(!store.canSave && !store.isCreating, "Missing files must start without an implicit creation")
+        store.beginCreation()
+        await store.refresh()
+        check(store.isCreating && !store.canSave && !files.fileExists(atPath: createdURL.path), "An empty creation draft survives refresh without creating a file")
+        store.edit(" \n\t")
+        check(!store.canSave, "Whitespace must not create an empty priority file")
+        store.edit("New instruction\n")
+        check(store.canSave && store.hasDraft(for: store.selectedDocument!), "A nonempty creation draft can be reviewed")
+        await store.prepareSave()
+        guard let creation = store.preview else { throw NSError(domain: "Instruction creation", code: 1) }
+        check(creation.document.data == nil && !files.fileExists(atPath: createdURL.path), "Creation review must not create a file")
+        check(await store.apply(creation), "Apply new instruction creation")
+        guard let creationBackup = store.creationUndo else { throw NSError(domain: "Creation undo eligibility", code: 1) }
+        try files.setAttributes([.posixPermissions: 0o444], ofItemAtPath: createdURL.path)
+        await store.refresh()
+        check(store.creationUndo == nil, "Read-only files must not expose creation undo")
+        try files.setAttributes([.posixPermissions: 0o644], ofItemAtPath: createdURL.path)
+        await store.refresh()
+        store.edit("Changed since creation\n")
+        check(store.creationUndo == nil, "Dirty drafts must block creation undo")
+        store.discardDraft()
+        await store.prepareRestore(creationBackup)
+        guard let undoCreation = store.preview else { throw NSError(domain: "Undo creation review", code: 1) }
+        check(undoCreation.replacementData == nil && files.fileExists(atPath: createdURL.path), "Creation undo must remain a preview")
+        check(await store.apply(undoCreation), "Apply reviewed creation undo")
+        check(!files.fileExists(atPath: createdURL.path) && store.selectedDocument?.data == nil && store.backups.count == 2, "Creation undo removes only the new file and retains its candidate and backups")
+        store.beginCreation()
+        store.edit("Cancelled draft")
+        store.discardDraft()
+        check(!store.isCreating && !store.hasDrafts && !files.fileExists(atPath: createdURL.path), "Discarding a new draft must never create a file")
+        store.chooseAgent(.codex)
+        let override = store.agentDocuments.first { $0.url.lastPathComponent == "AGENTS.override.md" }!
+        store.selectedID = override.id
+        store.beginCreation()
+        store.chooseAgent(.grokBuild)
+        store.chooseAgent(.codex)
+        check(store.selectedID == override.id && store.isCreating, "Returning to an agent must select its unfinished creation draft")
+        try "Created outside the app\n".write(to: override.url, atomically: true, encoding: .utf8)
+        await store.refresh()
+        check(store.text == "Created outside the app\n" && !store.isCreating && !store.externallyChanged, "An empty draft must yield to a file created externally")
+        print("PASS: instruction drafts, unsupported agents, navigation, external conflicts, reviewed writes, explicit nonempty creation, protected existing files and reviewed creation undo")
     }
 
     @MainActor private static func checkAgentInstallations() async throws {
@@ -554,7 +632,11 @@ struct AppStateCheck {
         precondition(store.profiles[0].note == "Preserved note" && defaults.data(forKey: "workProfiles") == originalData)
         await store.rescan()
         precondition(store.groups.count == 1, "Migration is idempotent")
+        store.groupFilterID = legacy.id
+        store.selectedGroupID = legacy.id
         store.deleteGroup(legacy.id)
+        check(store.groupFilterID == nil && store.selectedGroupID == nil,
+            "Deleting a selected group must clear its filter and detail selection")
         await store.rescan()
         precondition(store.groups.isEmpty, "Deleted imported groups do not reappear")
         let one = store.skills.first { $0.name == "one" }!.id
@@ -564,9 +646,68 @@ struct AppStateCheck {
         let b = SkillGroup(name: "B", skillIDs: [two, three])
         precondition(store.saveGroup(a) && store.saveGroup(b))
         precondition(!store.saveGroup(SkillGroup(name: "Forged", skillIDs: ["invalid"])))
+        store.groupFilterID = UUID()
+        check(store.groupFilterID == nil, "Unknown groups must not leave a Picker with an invalid selection")
         let oneEntry = store.entries.first { $0.name == "one" }!
         precondition(store.saveSource(for: oneEntry, input: "owner/repo"))
         store.toggleFavorite(one)
+        store.libraryFilter = .favorites
+        check(store.hasFilters, "Status scope alone must expose filter clearing")
+        store.clearLibraryFilters()
+        store.groupFilterID = a.id
+        check(store.hasFilters, "Group alone must expose filter clearing")
+        store.clearLibraryFilters()
+        guard let repository = SourceRepository("owner/repo"),
+              let selectedRoot = store.automaticRoots.first(where: { $0.agent == .codex })?.id else {
+            fputs("FAIL: Library filter fixture requires a valid source and default Codex root\n", stderr)
+            exit(1)
+        }
+        store.sourceFilterID = repository.id
+        check(store.hasFilters, "Source alone must expose filter clearing")
+        store.libraryFilter = .favorites
+        store.agentFilter = .codex
+        store.groupFilterID = a.id
+        store.rootFilterID = selectedRoot
+        store.linksOnly = true
+        store.search = "one"
+        check(store.filteredSkills.isEmpty && store.hasFilters, "All library filters must combine, including links")
+        store.navigate(to: .skills)
+        check(store.libraryFilter == .favorites && store.agentFilter == .codex
+            && store.groupFilterID == a.id && store.rootFilterID == selectedRoot
+            && store.sourceFilterID != nil && store.linksOnly && store.search == "one",
+            "Clicking the current skills destination must preserve combined filters")
+        store.linksOnly = false
+        check(store.filteredSkills.map(\.id) == [one], "Combined filters must match the same installation")
+        store.libraryFilter = .all
+        check(store.agentFilter == .codex && store.groupFilterID == a.id
+            && store.sourceFilterID == repository.id
+            && store.rootFilterID == selectedRoot && store.search == "one", "Changing status must preserve the other filters")
+        store.groupFilterID = b.id
+        check(store.filteredSkills.isEmpty && store.libraryFilter == .all
+            && store.agentFilter == .codex && store.rootFilterID == selectedRoot
+            && store.sourceFilterID != nil && store.search == "one", "Changing group must preserve the other filters")
+        store.selectedSkillID = "stale-selection"
+        store.clearLibraryFilters()
+        check(!store.hasFilters && store.libraryFilter == .all && store.groupFilterID == nil
+            && store.sourceFilterID == nil && store.filteredSkills.count == 3 && store.selectedSkillID == nil,
+            "Clearing library filters must clear every scope and stale selection")
+        store.selectedSkillID = one
+        store.clearLibraryFilters()
+        check(store.selectedSkillID == one, "Clearing filters must preserve a valid selected skill")
+        store.navigate(.favorites, agent: .codex, group: a.id)
+        check(store.page == .library && store.filteredSkills.map(\.id) == [one]
+            && store.agentFilter == .codex && store.groupFilterID == a.id, "Existing navigation must still open scoped library views")
+        store.page = .groups
+        check(!store.hasFilters && store.libraryFilter == .all && store.groupFilterID == nil,
+            "Changing tasks must clear library scopes along with existing shared filters")
+        store.selectedGroupID = a.id
+        store.navigate(to: .skills)
+        check(store.page == .groups && store.selectedGroupID == a.id,
+            "Clicking the current skills destination must preserve the group section and selection")
+        store.showLibrary(rootID: selectedRoot, sourceID: repository.id)
+        check(store.page == .library && store.agentFilter == .codex
+            && store.sourceFilterID != nil && store.filteredSkills.map(\.id) == [one],
+            "Existing location and source navigation must remain supported")
         store.navigate(.favorites)
         precondition(store.filteredSkills.map(\.id) == [one])
         store.navigate()

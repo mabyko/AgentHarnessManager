@@ -16,6 +16,7 @@ Most detailed notes are currently in Korean. They include proposed behavior beyo
 | [Product scenarios](product-scenarios.md) | User flows, scope, failure handling, and acceptance criteria |
 | [Glossary](../GLOSSARY.md) | Plugins, skills, sources, work configurations, and planned file states |
 | [Design system](design-system.md) | Native UI principles, tokens, component states, and accessibility |
+| [Workbench UX](design/workbench-ux.md) | Persistent navigation, button feedback, explicit instruction creation and reviewed creation undo |
 | [Design review](design-review.md) | Historical prototype findings and proposed safety requirements |
 | [Selected design](design/final-candidate.md) | Adopted visual direction and historical native validation notes |
 | [Icon notes](design/icons/README.md) | App icon sources, development variant, and generation prompts |

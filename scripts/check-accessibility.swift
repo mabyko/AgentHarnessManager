@@ -12,6 +12,7 @@ import SwiftUI
     @MainActor static func run() throws {
         guard CommandLine.arguments.count >= 2 && CommandLine.arguments[1].hasPrefix("ahm.settings.check.") else { exit(64) }
         let suite = CommandLine.arguments[1]
+        let home = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent().appendingPathComponent("home")
         if CommandLine.arguments.last == "--fixture" { try fixture(suite); return }
         guard AXIsProcessTrusted() else {
             fputs("Accessibility access is unavailable for the test runner; no permission prompt was requested.\n", stderr)
@@ -50,6 +51,13 @@ import SwiftUI
                 result = elements(app).first { string($0, "AXIdentifier") == id }; return result != nil
             }
             return result!
+        }
+        func expectHeading(_ title: String) {
+            wait("Missing destination heading: " + title) {
+                elements(find("workbench.listTitle")).contains { element in
+                    ["AXValue", "AXTitle", "AXDescription"].contains { string(element, $0) == title }
+                }
+            }
         }
         func key(_ code: CGKeyCode, flags: CGEventFlags = []) {
             for down in [true, false] {
@@ -120,9 +128,71 @@ import SwiftUI
 
         let library = find("a11y.library")
         check(AXUIElementPerformAction(library, "AXRaise" as CFString) == .success)
-        let newGroup = elements(library).first { string($0, "AXRole") == "AXButton" && string($0, "AXDescription") == "새 그룹" }!
-        check(elements(library).contains { string($0, "AXRole") == "AXButton" && string($0, "AXDescription") == "Codex, 1개" })
-        check(!elements(library).contains { string($0, "AXRole") == "AXButton" && string($0, "AXDescription") == "Claude Code, 1개" }, "An uninstalled agent must be absent from the library sidebar")
+        let navigation = ["sidebar.skills", "sidebar.instructions", "sidebar.activity"]
+        let navigationLabels = ["스킬 라이브러리", "전역 지침", "활동 이력"]
+        let sidebarIDs = Set(elements(library).map { string($0, "AXIdentifier") }.filter { $0.hasPrefix("sidebar.") })
+        check(sidebarIDs == Set(navigation), "Sidebar must expose only three task destinations: \(sidebarIDs)")
+        for (id, label) in zip(navigation, navigationLabels) {
+            let row = find(id)
+            let role = string(row, "AXRole")
+            let title = string(row, "AXTitle")
+            let description = string(row, "AXDescription")
+            check(role == "AXButton" && (title.contains(label) || description.contains(label)),
+                  "Task navigation must be a named native button: \(id), expected=\(label), role=\(role), title=\(title), description=\(description)")
+        }
+        check(!elements(library).contains { string($0, "AXRole") == "AXButton" && string($0, "AXDescription") == "새 그룹" }, "New group belongs to its section header, outside the task sidebar")
+        focus(find("sidebar.skills"))
+        key(48)
+        check(focusedID() == "sidebar.instructions", "Tab must reach global instructions; focused=" + focusedID())
+        key(48)
+        check(focusedID() == "sidebar.activity", "Tab must reach activity; focused=" + focusedID())
+        key(48, flags: .maskShift)
+        check(focusedID() == "sidebar.instructions", "Shift-Tab must return to instructions")
+        key(49)
+        _ = find("instructions.agentPicker")
+        expectHeading("전역 지침")
+
+        func press(_ id: String, expecting nextID: String? = nil) {
+            let result = AXUIElementPerformAction(find(id), "AXPress" as CFString)
+            if let nextID { _ = find(nextID) }
+            else { check(result == .success, "Cannot activate " + id) }
+        }
+        func selectSegment(_ id: String, _ title: String) {
+            var segment: AXUIElement?
+            wait("Missing native segment: " + title) {
+                segment = elements(find(id)).first { element in
+                    ["AXRadioButton", "AXButton"].contains(string(element, "AXRole")) &&
+                    ["AXTitle", "AXDescription"].contains { key in string(element, key) == title }
+                }
+                return segment != nil
+            }
+            _ = AXUIElementPerformAction(segment!, "AXPress" as CFString)
+            Thread.sleep(forTimeInterval: 0.15)
+        }
+        func selectMenu(_ id: String, _ title: String) {
+            press(id)
+            var item: AXUIElement?
+            wait("Missing native filter option: " + title) {
+                item = elements(app).first { string($0, "AXRole") == "AXMenuItem" && string($0, "AXTitle") == title }
+                return item != nil
+            }
+            _ = AXUIElementPerformAction(item!, "AXPress" as CFString)
+            wait("Filter did not select: " + title) { string(find(id), "AXValue").contains(title) }
+        }
+        func expectText(_ text: String) {
+            wait("Missing section description: " + text) { elements(library).contains { string($0, "AXValue").contains(text) } }
+        }
+        press("sidebar.activity", expecting: "workbench.activitySection")
+        expectHeading("활동 이력")
+        for (segment, description) in [("요청", "에이전트가 제안한 변경"), ("변경", "완료 기록 최근"), ("검사 이력", "로컬 검사 이력")] {
+            selectSegment("workbench.activitySection", segment)
+            expectText(description)
+            expectHeading("활동 이력")
+        }
+        press("sidebar.skills", expecting: "workbench.skillSection")
+        selectSegment("workbench.skillSection", "그룹")
+        let newGroup = find("groups.new")
+        check(string(newGroup, "AXRole") == "AXButton", "New group must be a native header button")
         focus(newGroup); key(49)
         wait("Keyboard action did not open the group sheet") { elements(app).contains { string($0, "AXRole") == "AXSheet" } }
         wait("Group name field did not receive focus") {
@@ -131,7 +201,30 @@ import SwiftUI
         }
         key(53)
         wait("Escape did not dismiss the group sheet") { !elements(app).contains { string($0, "AXRole") == "AXSheet" } }
-        print("PASS: native AX agent names/states and press actions, unique action/path labels, hidden decorative icons, sidebar Tab/Shift-Tab/Space, accessible picker selection, and group-sheet focus/Escape; isolated fixture only")
+        selectSegment("workbench.skillSection", "검사 결과")
+        expectText("로컬 검사 ·")
+        selectSegment("workbench.skillSection", "스킬")
+        _ = find("library.scope")
+        press("library.agent")
+        wait("Installed agent filter options did not open") { elements(app).contains { string($0, "AXRole") == "AXMenuItem" && string($0, "AXTitle") == "Codex" } }
+        let agentOptions = elements(app).filter { string($0, "AXRole") == "AXMenuItem" }.map { string($0, "AXTitle") }
+        check(agentOptions.contains("Codex") && agentOptions.contains("OpenCode"), "Installed agents must appear in the filter menu")
+        check(!agentOptions.contains { $0.contains("Claude Code") }, "Uninstalled agents must not appear in the filter menu")
+        key(53)
+        selectMenu("library.agent", "Codex")
+        selectMenu("library.group", "Keyboard group")
+        check(string(find("library.agent"), "AXValue").contains("Codex"), "Selecting a group must preserve the agent filter")
+        expectText("keyboard-demo")
+        check((value(find("library.clearFilters"), "AXEnabled") as? Bool) == true, "Combined filters must expose reset")
+        press("library.clearFilters")
+        wait("Combined filters did not clear") {
+            string(find("library.agent"), "AXValue").contains("모든 에이전트") &&
+            string(find("library.group"), "AXValue").contains("모든 그룹") &&
+            (value(find("library.clearFilters"), "AXEnabled") as? Bool) == false
+        }
+        try Data().write(to: home.appendingPathComponent("capture.layout"))
+        wait("Workbench layout screenshots were not captured") { FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.layout.done").path) }
+        print("PASS: native AX agent names/states and actions; task-only sidebar Tab/Shift-Tab/Space; segmented skills/instructions/activity navigation; installed-agent and combined group filters/reset; group-sheet focus/Escape; full-window layout captures in /tmp/ahm-workbench-layout-*.png")
         print("NOT CHECKED: spoken VoiceOver output and global all-controls Tab traversal; system settings unchanged")
     }
 
@@ -153,19 +246,63 @@ import SwiftUI
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
         }
         let store = AppStore(defaults: defaults, home: home,
-                             installationDetector: AgentInstallationDetector(executableDirectories: [bin], applicationDirectories: []))
+                             installationDetector: AgentInstallationDetector(executableDirectories: [bin], applicationDirectories: []), instructionEnvironment: [:])
         func window<V: View>(_ root: V, id: String, size: NSSize) -> NSWindow {
-            let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: 80, y: 80), size: size), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+            let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: 80, y: 80), size: size), styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
             window.setAccessibilityIdentifier(id)
-            window.contentView = NSHostingView(rootView: root.environment(store))
+            let controller = NSHostingController(rootView: root.environment(store))
+            controller.sizingOptions = [.minSize]
+            window.contentViewController = controller
+            window.setContentSize(size)
             window.makeKeyAndOrderFront(nil)
             return window
         }
-        let library = window(ContentView(), id: "a11y.library", size: NSSize(width: 1280, height: 800))
+        let library = window(ContentView().frame(minWidth: 960, minHeight: 640), id: "a11y.library", size: NSSize(width: 1280, height: 800))
         let settings = window(SettingsView(), id: "a11y.settings", size: NSSize(width: 900, height: 900))
         app.activate(ignoringOtherApps: true)
-        Task { @MainActor in await store.rescan() }
+        Task { @MainActor in
+            await store.rescan()
+            while store.isScanning || !store.hasScanned { try? await Task.sleep(for: .milliseconds(50)) }
+            guard let skill = store.skills.first(where: { $0.name == "keyboard-demo" }),
+                  store.saveGroup(SkillGroup(name: "Keyboard group", skillIDs: [skill.id])) else {
+                fputs("FAIL: Could not seed the isolated keyboard group\n", stderr); exit(1)
+            }
+            while !FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.layout").path) {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            store.selectedSkillID = store.filteredSkills.first?.id
+            for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua), ("compact", NSAppearance.Name.darkAqua)] {
+                library.appearance = NSAppearance(named: appearance)
+                if name == "compact" {
+                    library.setContentSize(NSSize(width: 960, height: 640))
+                    library.contentView?.layoutSubtreeIfNeeded()
+                    let layout = library.contentLayoutRect.size
+                    let content = library.contentView!.bounds.size
+                    library.setContentSize(NSSize(width: content.width + max(0, 960 - layout.width),
+                                                  height: content.height + max(0, 640 - layout.height)))
+                }
+                library.makeKeyAndOrderFront(nil)
+                library.contentView?.layoutSubtreeIfNeeded()
+                try? await Task.sleep(for: .milliseconds(300))
+                let output = URL(fileURLWithPath: "/tmp/ahm-workbench-layout-" + name + ".png")
+                if CGPreflightScreenCaptureAccess() {
+                    let capture = Process()
+                    capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                    capture.arguments = ["-x", "-o", "-l", String(library.windowNumber), output.path]
+                    do {
+                        try capture.run(); capture.waitUntilExit()
+                        if capture.terminationStatus == 0 { continue }
+                    }
+                    catch { print("Window screenshot unavailable:", error.localizedDescription) }
+                }
+                if let view = library.contentView, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                    view.cacheDisplay(in: view.bounds, to: bitmap)
+                    try? bitmap.representation(using: .png, properties: [:])?.write(to: output)
+                }
+            }
+            try? Data().write(to: home.appendingPathComponent("capture.layout.done"))
+        }
         withExtendedLifetime((library, settings)) { app.run() }
     }
 }

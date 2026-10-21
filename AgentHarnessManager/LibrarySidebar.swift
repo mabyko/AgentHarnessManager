@@ -2,107 +2,61 @@ import SkillCore
 import SwiftUI
 
 struct LibrarySidebar: View {
-    let newGroup: () -> Void
     @Environment(AppStore.self) private var store
-    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                        ForEach(LibraryFilter.allCases) { filter in
-                            let selected = store.libraryFilter == filter && store.agentFilter == nil && store.groupFilterID == nil && (store.page == .library || store.page == .findings)
-                            Button { store.navigate(filter) } label: {
-                                VStack(alignment: .leading, spacing: 9) {
-                                    HStack {
-                                        Image(systemName: filter.symbol)
-                                        Spacer()
-                                        Text("\(store.count(filter))").monospacedDigit().fontWeight(.semibold)
-                                    }
-                                    Text(filter.title).font(.caption)
-                                }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(selected ? WorkbenchTheme.selection : WorkbenchTheme.raised, in: RoundedRectangle(cornerRadius: 8))
-                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? WorkbenchTheme.accent : .clear, lineWidth: 1))
-                            }.buttonStyle(.plain).keyboardActivation { store.navigate(filter) }
-                                .foregroundStyle(WorkbenchTheme.sidebarText)
-                                .accessibilityLabel("\(filter.title), \(store.count(filter))개")
-                                .accessibilityAddTraits(selected ? .isSelected : [])
-                        }
-                    }
-                    VStack(alignment: .leading, spacing: 4) {
-                        sectionTitle("에이전트")
-                        ForEach(store.sidebarAgents, id: \.self) { agent in
-                            row(agent.displayName, count: store.skills.filter { $0.installations.contains { store.agents(for: $0.location).contains(agent) } }.count,
-                                selected: store.page == .library && store.agentFilter == agent,
-                                action: { store.navigate(agent: agent) }) { AgentIcon(agent: agent) }
-                        }
-                        if store.sidebarAgents.isEmpty {
-                            Text(store.agentInstallations.isEmpty ? "설치 상태 확인 중…" : "설치가 감지된 에이전트가 없습니다. 설정에서 설치 상태를 확인하세요.")
-                                .font(.caption).foregroundStyle(WorkbenchTheme.sidebarSecondary).padding(8)
-                        }
-                    }
-                    VStack(alignment: .leading, spacing: 4) {
-                        sectionTitle("지침")
-                        row("전역 지침", symbol: "text.document", count: GlobalInstructionService.supportedAgents.count,
-                            selected: store.page == .instructions) { store.page = .instructions }
-                    }
-                    VStack(alignment: .leading, spacing: 4) {
-                        sectionTitle("그룹")
-                        row("모든 그룹", symbol: "folder", count: store.groups.count, selected: store.page == .groups) { store.page = .groups }
-                        ForEach(store.groups) { group in
-                            row(group.name, symbol: group.symbol, count: group.skillIDs.count, selected: store.page == .library && store.groupFilterID == group.id) {
-                                store.navigate(group: group.id)
-                            }
-                            .contextMenu {
-                                Button("그룹 상세") { store.page = .groups; store.selectedGroupID = group.id }
-                            }
-                        }
-                    }
-                    VStack(alignment: .leading, spacing: 4) {
-                        sectionTitle("검사")
-                        row("검사 이력", symbol: "checkmark.shield", count: store.reviews.count, selected: store.page == .history) { store.page = .history }
-                    }
-                    VStack(alignment: .leading, spacing: 4) {
-                        sectionTitle("파일 변경")
-                        row("에이전트 요청", symbol: "tray.and.arrow.down", count: store.agentRequests.count, selected: store.page == .requests) { store.page = .requests }
-                        row("변경 이력", symbol: "arrow.left.arrow.right", count: store.mutations.count, selected: store.page == .changes) { store.page = .changes }
-                    }
-                    if !store.profiles.isEmpty || store.profilesLoadFailed {
-                        VStack(alignment: .leading, spacing: 4) {
-                            sectionTitle("보존된 데이터")
-                            row("이전 작업 구성", symbol: "archivebox", count: store.profiles.count, selected: store.page == .profiles) { store.page = .profiles }
-                        }
-                    }
-                }.padding(14)
+        VStack(alignment: .leading, spacing: 0) {
+            Text("작업 공간")
+                .accessibilityAddTraits(.isHeader)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(WorkbenchTheme.sidebarSecondary)
+                .padding(.horizontal, 12).padding(.top, 20).padding(.bottom, 12)
+            ForEach(AppDestination.allCases) { destination in
+                destinationRow(destination)
             }
-            Divider()
-            HStack {
-                Button(action: newGroup) { Label("새 그룹", systemImage: "plus") }.buttonStyle(.plain).keyboardActivation(newGroup).disabled(!store.metadataIsEditable)
-                Spacer()
-                Button { openSettings() } label: { Label("설정", systemImage: "gearshape") }.labelStyle(.iconOnly).buttonStyle(.plain).keyboardActivation { openSettings() }
-            }.padding(16)
-        }
+            Spacer(minLength: 20)
+        }.padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
-    private func sectionTitle(_ title: String) -> some View {
-        Text(title).font(.caption.weight(.semibold)).foregroundStyle(WorkbenchTheme.sidebarSecondary).padding(.bottom, 6)
-    }
-    private func row(_ title: String, symbol: String, count: Int, selected: Bool, action: @escaping () -> Void) -> some View {
-        row(title, count: count, selected: selected, action: action) { Image(systemName: symbol) }
-    }
-    private func row<Icon: View>(_ title: String, count: Int, selected: Bool, action: @escaping () -> Void,
-                                 @ViewBuilder icon: () -> Icon) -> some View {
-        Button(action: action) {
-            HStack(spacing: 9) {
-                icon().frame(width: 18)
-                Text(title).lineLimit(1)
-                Spacer(minLength: 4)
-                Text("\(count)").font(.caption).monospacedDigit()
-            }.foregroundStyle(WorkbenchTheme.sidebarText).padding(8)
-                .background(selected ? WorkbenchTheme.selection : .clear, in: RoundedRectangle(cornerRadius: 6))
-                .contentShape(Rectangle())
-        }.buttonStyle(.plain).keyboardActivation(action)
-            .accessibilityLabel("\(title), \(count)개")
+
+    private func destinationRow(_ destination: AppDestination) -> some View {
+        let selected = store.page.destination == destination
+        let status = summary(destination)
+        return Button { store.navigate(to: destination) } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: destination.symbol)
+                    .font(.system(size: 17)).frame(width: 22, height: 22)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(destination.title).font(.body.weight(selected ? .semibold : .regular))
+                    Text(status).font(.caption).foregroundStyle(WorkbenchTheme.sidebarSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                if destination == .instructions && store.instructions.hasDrafts {
+                    Image(systemName: "circle.fill").font(.system(size: 6))
+                        .foregroundStyle(WorkbenchTheme.accent).padding(.top, 7)
+                        .accessibilityHidden(true)
+                }
+            }.foregroundStyle(WorkbenchTheme.sidebarText)
+                .padding(.horizontal, 10).padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }.buttonStyle(SidebarButtonStyle(selected: selected))
+            .keyboardActivation { store.navigate(to: destination) }
+            .accessibilityLabel(destination.title + ", " + status)
+            .accessibilityIdentifier("sidebar." + destination.rawValue)
             .accessibilityAddTraits(selected ? .isSelected : [])
+            .padding(.bottom, 6)
+    }
+
+    private func summary(_ destination: AppDestination) -> String {
+        switch destination {
+        case .skills:
+            "스킬 \(store.skills.count) · 확인 필요 \(store.currentFindings.count)"
+        case .instructions:
+            store.instructions.hasDrafts ? "저장하지 않은 초안 있음" : "에이전트별 지침 파일"
+        case .activity:
+            store.journal.pending != nil ? "중단된 변경 · 복구 필요" : "요청 \(store.agentRequests.count) · 변경 \(store.mutations.count)"
+        }
     }
 }

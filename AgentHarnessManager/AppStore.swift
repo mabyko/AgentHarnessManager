@@ -3,13 +3,39 @@ import Observation
 import Foundation
 import SkillCore
 
-enum AppPage: String, CaseIterable, Identifiable {
-    case library, findings, groups, history, changes, requests, profiles, instructions
+enum AppDestination: String, CaseIterable, Identifiable {
+    case skills, instructions, activity
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .library: "스킬 목록"
-        case .findings: "확인 필요"
+        case .skills: "스킬 라이브러리"
+        case .instructions: "전역 지침"
+        case .activity: "활동 이력"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .skills: "square.stack.3d.up"
+        case .instructions: "text.document"
+        case .activity: "clock.arrow.circlepath"
+        }
+    }
+}
+
+enum AppPage: String, CaseIterable, Identifiable {
+    case library, findings, groups, history, changes, requests, profiles, instructions
+    var id: String { rawValue }
+    var destination: AppDestination {
+        switch self {
+        case .library, .findings, .groups: .skills
+        case .instructions: .instructions
+        case .history, .changes, .requests, .profiles: .activity
+        }
+    }
+    var title: String {
+        switch self {
+        case .library: "스킬 라이브러리"
+        case .findings: "검사 결과"
         case .profiles: "이전 작업 구성"
         case .groups: "그룹"
         case .history: "검사 이력"
@@ -57,11 +83,17 @@ final class AppStore {
     let instructions: InstructionStore
     var page: AppPage = .library {
         didSet {
-            if page != oldValue { sourceFilterID = nil; rootFilterID = nil; resetFilters(); selectedEntry = nil; selectedSkillID = nil; selectedFindingID = nil }
+            if page.destination == .activity { lastActivityPage = page }
+            if page != oldValue { clearLibraryFilters(); selectedEntry = nil; selectedSkillID = nil; selectedFindingID = nil }
         }
     }
+    private(set) var lastActivityPage: AppPage = .history
     var libraryFilter: LibraryFilter = .all
-    var groupFilterID: UUID?
+    var groupFilterID: UUID? {
+        didSet {
+            if let id = groupFilterID, !groups.contains(where: { $0.id == id }) { groupFilterID = nil }
+        }
+    }
     var selectedSkillID: String?
     var selectedGroupID: UUID?
     var selectedFindingID: String?
@@ -269,7 +301,10 @@ final class AppStore {
         }
     }
     var availableRoots: [DiscoveryRoot] { registeredRoots.filter { agentFilter == nil || agents(for: $0).contains(agentFilter!) } }
-    var hasFilters: Bool { !search.isEmpty || agentFilter != nil || linksOnly || rootFilterID != nil }
+    var hasFilters: Bool {
+        !search.isEmpty || agentFilter != nil || linksOnly || rootFilterID != nil
+        || libraryFilter != .all || groupFilterID != nil || sourceFilterID != nil
+    }
     var filteredEntries: [SkillEntry] {
         scopeEntries.filter {
             (agentFilter == nil || agents(for: $0).contains(agentFilter!))
@@ -371,6 +406,13 @@ final class AppStore {
     }
 
     func resetFilters() { search = ""; agentFilter = nil; linksOnly = false; rootFilterID = nil }
+    func clearLibraryFilters() {
+        libraryFilter = .all
+        groupFilterID = nil
+        sourceFilterID = nil
+        resetFilters()
+        if let id = selectedSkillID, !filteredSkills.contains(where: { $0.id == id }) { selectedSkillID = nil }
+    }
     func matchesSearch(_ text: String) -> Bool { search.isEmpty || text.localizedCaseInsensitiveContains(search) }
 
     func rescan() async {
@@ -554,6 +596,15 @@ extension AppStore {
         libraryFilter = filter; agentFilter = agent; groupFilterID = group
         selectedSkillID = nil; selectedFindingID = nil
     }
+    func navigate(to destination: AppDestination) {
+        guard page.destination != destination else { return }
+        switch destination {
+        case .skills: navigate()
+        case .instructions: page = .instructions
+        case .activity:
+            page = lastActivityPage == .profiles && profiles.isEmpty && !profilesLoadFailed ? .history : lastActivityPage
+        }
+    }
     func toggleFavorite(_ id: String) {
         guard metadataIsEditable, skills.contains(where: { $0.id == id }) else { return }
         var updated = preferences
@@ -581,7 +632,10 @@ extension AppStore {
         guard metadataIsEditable else { return }
         var updated = preferences
         updated.groups.removeAll { $0.id == id }; updated.activeGroupIDs.remove(id)
-        if savePreferences(updated), selectedGroupID == id { selectedGroupID = nil }
+        if savePreferences(updated) {
+            if selectedGroupID == id { selectedGroupID = nil }
+            if groupFilterID == id { groupFilterID = nil }
+        }
     }
     func setGroupMode(_ mode: GroupSelectionMode) {
         guard metadataIsEditable else { return }
