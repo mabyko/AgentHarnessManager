@@ -189,12 +189,36 @@ import SwiftUI
         }
         AXUIElementPerformAction(find("a11y.settings"), "AXRaise" as CFString)
         selectPage("general")
-        selectMenu("settings.installMethod", "skills CLI")
-        check(string(find("settings.installMethod"), "AXValue").contains("skills CLI"), "Detected CLI must be selectable")
+        selectMenu("settings.managementMethod", "skills CLI")
+        check(string(find("settings.managementMethod"), "AXValue").contains("skills CLI"), "Detected CLI must be selectable")
+        AXUIElementPerformAction(library, "AXRaise" as CFString)
+        _ = AXUIElementSetAttributeValue(library, "AXMain" as CFString, kCFBooleanTrue)
+        press("sidebar.skills", expecting: "workbench.skillSection")
+        try Data().write(to: home.appendingPathComponent("select.update"))
+        wait("Update fixture must select its skill") { FileManager.default.fileExists(atPath: home.appendingPathComponent("select.update.done").path) }
+        press("library.checkUpdates")
+        wait("Update count must appear") { elements(library).contains { string($0, "AXIdentifier") == "library.showUpdates" } }
+        wait("Available update badge must appear") { elements(library).contains { string($0, "AXIdentifier") == "library.reviewUpdate" } }
+        selectMenu("library.scope", "업데이트 있음 · 1")
+        check(elements(library).contains { string($0, "AXValue").contains("keyboard-demo") }, "Update filter must preserve the selected skill")
+        try Data().write(to: home.appendingPathComponent("capture.lifecycle"))
+        wait("Lifecycle UI screenshots were not captured") { FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.lifecycle.done").path) }
+        press("library.reviewUpdate")
+        wait("Update must open a CLI review") { elements(app).contains { string($0, "AXIdentifier") == "library.applyCLIChange" } }
+        check(elements(app).contains { string($0, "AXValue").contains("skills update는 에이전트 범위") }, "Update review must disclose scoped CLI reinstall")
+        key(53)
+        wait("Escape must cancel update") { !elements(app).contains { string($0, "AXRole") == "AXSheet" } }
+        press("library.removeSkill")
+        wait("CLI deletion review must open") { elements(app).contains { string($0, "AXIdentifier") == "library.applyCLIChange" } }
+        check(elements(app).contains { string($0, "AXValue").contains("현재 목록 밖의 동명 설치 포함") }, "Global CLI delete must disclose its full scope")
+        key(53)
+        wait("Escape must cancel CLI delete") { !elements(app).contains { string($0, "AXRole") == "AXSheet" } }
+        check(FileManager.default.fileExists(atPath: home.appendingPathComponent(".agents/skills/keyboard-demo/SKILL.md").path), "Cancelled CLI changes must preserve source")
+        AXUIElementPerformAction(find("a11y.settings"), "AXRaise" as CFString)
         try FileManager.default.removeItem(at: home.appendingPathComponent("bin/skills"))
         press("settings.refreshSkillsCLI")
-        check(string(find("settings.installMethod"), "AXValue").contains("skills CLI"), "CLI disappearance must preserve selection")
-        selectMenu("settings.installMethod", "앱 직접 설치")
+        check(string(find("settings.managementMethod"), "AXValue").contains("skills CLI"), "CLI disappearance must preserve selection")
+        selectMenu("settings.managementMethod", "앱 직접 관리")
         AXUIElementPerformAction(library, "AXRaise" as CFString)
         press("sidebar.activity", expecting: "workbench.activitySection")
         expectHeading("활동 이력")
@@ -268,7 +292,7 @@ import SwiftUI
         wait("Escape must cancel installation") { !elements(app).contains { string($0, "AXRole") == "AXSheet" } }
         try Data().write(to: home.appendingPathComponent("capture.layout"))
         wait("Workbench layout screenshots were not captured") { FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.layout.done").path) }
-        print("PASS: native AX agent names/states and actions; task-only sidebar Tab/Shift-Tab/Space; segmented skills/instructions/activity navigation; installed-agent and combined group filters/reset; group/install-sheet focus/Escape; optional GitHub selection/download/review; full-window layout captures in /tmp/ahm-workbench-layout-*.png")
+        print("PASS: native AX agent names/states/actions; task navigation and filters; CLI management selection, available update/filter, scoped update and global deletion review/cancel; group/install focus/Escape; optional GitHub selection/download/review; light/dark lifecycle captures in /tmp/ahm-lifecycle-*.png")
         print("NOT CHECKED: spoken VoiceOver output and global all-controls Tab traversal; system settings unchanged")
     }
 
@@ -299,7 +323,10 @@ import SwiftUI
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: skillsCLI.path)
         let cliService = SkillsCLIService(home: home, environment: [:], detector: AgentInstallationDetector(executableDirectories: [bin], applicationDirectories: []))
         let store = AppStore(defaults: defaults, home: home,
-                             installationDetector: AgentInstallationDetector(executableDirectories: [bin], applicationDirectories: []), skillsCLIService: cliService, instructionEnvironment: [:])
+                             installationDetector: AgentInstallationDetector(executableDirectories: [bin], applicationDirectories: []), skillsCLIService: cliService,
+                             gitHubSkills: SkillUpdateFixture.service(), instructionEnvironment: [:])
+        let receipt = home.appendingPathComponent(".agents/.skill-lock.json")
+        try JSONSerialization.data(withJSONObject: ["version": 3, "skills": ["keyboard-demo": ["source": "fixture/keyboard", "sourceType": "github", "ref": "main", "skillPath": "skills/keyboard-demo/SKILL.md", "skillFolderHash": String(repeating: "0", count: 40)]]]).write(to: receipt)
         func window<V: View>(_ root: V, id: String, size: NSSize) -> NSWindow {
             let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: 80, y: 80), size: size), styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
@@ -321,7 +348,28 @@ import SwiftUI
                   store.saveGroup(SkillGroup(name: "Keyboard group", skillIDs: [skill.id])) else {
                 fputs("FAIL: Could not seed the isolated keyboard group\n", stderr); exit(1)
             }
+            store.selectedSkillID = skill.id
             while !FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.layout").path) {
+                if FileManager.default.fileExists(atPath: home.appendingPathComponent("select.update").path),
+                   !FileManager.default.fileExists(atPath: home.appendingPathComponent("select.update.done").path) {
+                    store.selectedSkillID = skill.id
+                    try? Data().write(to: home.appendingPathComponent("select.update.done"))
+                }
+                if FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.lifecycle").path),
+                   !FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.lifecycle.done").path) {
+                    for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
+                        for (window, prefix) in [(library, "library"), (settings, "settings")] {
+                            window.appearance = NSAppearance(named: appearance)
+                            window.contentView?.layoutSubtreeIfNeeded()
+                            try? await Task.sleep(for: .milliseconds(150))
+                            if let view = window.contentView, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                                view.cacheDisplay(in: view.bounds, to: bitmap)
+                                try? bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/ahm-lifecycle-\(prefix)-\(name).png"))
+                            }
+                        }
+                    }
+                    try? Data().write(to: home.appendingPathComponent("capture.lifecycle.done"))
+                }
                 if FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.install").path),
                    !FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.install.done").path),
                    let sheet = library.attachedSheet, let view = sheet.contentView {

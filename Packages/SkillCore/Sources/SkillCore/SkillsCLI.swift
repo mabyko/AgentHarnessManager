@@ -2,12 +2,17 @@ import CryptoKit
 import Darwin
 import Foundation
 
-public enum SkillInstallMethod: String, CaseIterable, Sendable {
+public enum SkillManagementMethod: String, CaseIterable, Sendable {
     case direct, skillsCLI
-    public var title: String { self == .direct ? "앱 직접 설치" : "skills CLI" }
+    public var title: String { self == .direct ? "앱 직접 관리" : "skills CLI" }
 }
 
-public struct SkillsCLIInstallPlan: Identifiable, Sendable {
+public enum SkillsCLIOperation: Sendable {
+    case install, remove, update
+    public var title: String { switch self { case .install: "설치"; case .remove: "삭제"; case .update: "업데이트" } }
+}
+
+public struct SkillsCLIPlan: Identifiable, Sendable {
     public let id = UUID()
     public let executable: URL
     public let arguments: [String]
@@ -16,20 +21,27 @@ public struct SkillsCLIInstallPlan: Identifiable, Sendable {
     public let checkedPaths: [String]
     public let expectedPaths: [String]
     public let roots: [DiscoveryRoot]
-    public let sourceFolder: URL
-    public let sourceHash: String
+    public let sourceFolder: URL?
+    public let sourceHash: String?
     let executableHash: String
     let receiptHash: String?
-    let documentHash: String
+    let documentHash: String?
+    public internal(set) var operation: SkillsCLIOperation = .install
+    public internal(set) var scopeNote: String = ""
+    public internal(set) var reviewedCommit: String?
+    public internal(set) var trackedReference: String?
+    public internal(set) var updateRepository: SourceRepository?
+    var pathStates: [String: String] = [:]
+    var expectedContents: [String: String] = [:]
     public var command: String {
         ([executable.path] + arguments).map { "'" + $0.replacingOccurrences(of: "'", with: "'\\''") + "'" }.joined(separator: " ")
     }
 }
 
 public struct SkillsCLIService: Sendable {
-    private let home: URL
-    private let environment: [String: String]
-    private let detector: AgentInstallationDetector
+    let home: URL
+    let environment: [String: String]
+    let detector: AgentInstallationDetector
 
     public init(home: URL = FileManager.default.homeDirectoryForCurrentUser,
                 environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -57,13 +69,9 @@ public struct SkillsCLIService: Sendable {
         }.first
     }
 
-    public func prepare(folder: URL, agent: SkillAgent, executable: URL, remoteSource: URL? = nil) throws -> SkillsCLIInstallPlan {
+    public func prepare(folder: URL, agent: SkillAgent, executable: URL, remoteSource: URL? = nil) throws -> SkillsCLIPlan {
         guard agent != .custom, let binaryHash = executableHash(executable) else { throw failure("skills CLI 실행 파일을 다시 확인하세요.") }
-        let version = try run(executable, arguments: ["--version"], timeout: 10)
-        let pieces = version.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "v")).split(separator: ".").compactMap { Int($0) }
-        guard pieces.count == 3, pieces[0] == 1, pieces[1] > 7 || (pieces[1] == 7 && pieces[2] >= 4) else {
-            throw failure("이 연동은 skills CLI 1.7.4 이상의 1.x 버전이 필요합니다. CLI를 업데이트한 뒤 다시 확인하세요.")
-        }
+        try validateVersion(executable)
         let sourceHash = try LibraryService.fingerprintDirectory(folder)
         let root = DiscoveryRoot(agent: .custom, url: folder, label: "설치 원본")
         let skills = LibraryCatalog.build(snapshot: SkillCatalog.scan(roots: [root]), roots: [root])
@@ -87,40 +95,47 @@ public struct SkillsCLIService: Sendable {
             source = remoteSource.absoluteString
         } else { source = folder.path }
         let name = Self.directoryName(skill.name)
-        let canonical = DiscoveryRoot(agent: .codex, url: home.appendingPathComponent(".agents/skills"), label: "skills CLI · 공유 스킬")
+        let canonical = canonicalRoot(), target = try installRoot(agent)
         let defaults = ManagementConfiguration.defaultRoots(home: home)
-        let agentID: String
-        switch agent { case .claudeCode: agentID = "claude-code"; case .grokBuild: agentID = "grok"; default: agentID = agent.rawValue }
-        let specific: DiscoveryRoot?
-        switch agent {
-        case .claudeCode:
-            specific = DiscoveryRoot(agent: agent, url: try base("CLAUDE_CONFIG_DIR", fallback: ".claude").appendingPathComponent("skills"), label: "Claude Code · skills CLI")
-        case .grokBuild:
-            specific = DiscoveryRoot(agent: agent, url: try base("GROK_HOME", fallback: ".grok").appendingPathComponent("skills"), label: "Grok Build · skills CLI")
-        case .devin:
-            specific = DiscoveryRoot(agent: agent, url: try base("XDG_CONFIG_HOME", fallback: ".config").appendingPathComponent("devin/skills"), label: "Devin CLI · skills CLI")
-        default: specific = nil
-        }
-        let roots = [canonical] + (specific.map { [$0] } ?? [])
+        let roots = canonical.url == target.url ? [canonical] : [canonical, target]
         let checked = Set((roots + defaults.filter { $0.agent == agent }).map { $0.url.appendingPathComponent(name).path }).sorted()
         for path in checked { try validateVacant(path) }
-        return SkillsCLIInstallPlan(executable: executable, arguments: ["add", source, "--global", "--agent", agentID, "--skill", skill.name, "--yes"],
-            name: skill.name, agent: agent, checkedPaths: checked, expectedPaths: [(specific ?? canonical).url.appendingPathComponent(name).path], roots: roots,
+        return SkillsCLIPlan(executable: executable, arguments: ["add", source, "--global", "--agent", agentID(agent), "--skill", skill.name, "--yes"],
+            name: skill.name, agent: agent, checkedPaths: checked, expectedPaths: [target.url.appendingPathComponent(name).path], roots: roots,
             sourceFolder: folder, sourceHash: sourceHash, executableHash: binaryHash, receiptHash: try receiptHash(), documentHash: documentHash)
     }
 
-    public func apply(_ plan: SkillsCLIInstallPlan) throws -> String {
+    public func apply(_ plan: SkillsCLIPlan) throws -> String {
         guard executableHash(plan.executable) == plan.executableHash,
-              try LibraryService.fingerprintDirectory(plan.sourceFolder) == plan.sourceHash,
               try receiptHash() == plan.receiptHash else { throw failure("검토 후 CLI·원본·설치 기록이 바뀌었습니다. 다시 검토하세요.") }
-        for path in plan.checkedPaths { try validateVacant(path) }
+        if let folder = plan.sourceFolder {
+            guard try LibraryService.fingerprintDirectory(folder) == plan.sourceHash else { throw failure("검토 후 원본이 바뀌었습니다. 다시 검토하세요.") }
+        }
+        if plan.operation == .install { for path in plan.checkedPaths { try validateVacant(path) } }
+        else {
+            for (path, expected) in plan.pathStates where try pathState(path) != expected {
+                throw failure("검토 후 설치 경로가 바뀌었습니다. 다시 검토하세요: " + path)
+            }
+        }
         let output = try run(plan.executable, arguments: plan.arguments, timeout: 180)
+        if plan.operation == .remove {
+            for path in plan.expectedPaths where try pathState(path) != "missing" {
+                throw failure("CLI 실행 후에도 삭제 대상이 남아 있습니다. 일부 변경이 있을 수 있으니 새로고침 후 확인하세요.")
+            }
+            return output
+        }
         for path in plan.expectedPaths {
             let root = DiscoveryRoot(agent: plan.agent, url: URL(fileURLWithPath: path), label: "CLI 설치 결과")
             let scan = SkillCatalog.scan(roots: [root], additionalApprovedRoots: plan.roots)
             guard let entry = scan.entries.first,
                   LibraryCatalog.digest(try SkillCatalog.readDocument(entry: entry, approvedRoots: [root] + plan.roots)) == plan.documentHash else {
                 throw failure("CLI 실행은 끝났지만 예상한 설치 내용을 확인하지 못했습니다. 일부 변경이 있을 수 있으니 새로고침 후 확인하세요.")
+            }
+            if !plan.expectedContents.isEmpty {
+                let installed = URL(fileURLWithPath: path).resolvingSymlinksInPath()
+                guard try GitHubSkillService.contentHashes(folder: installed) == plan.expectedContents else {
+                    throw failure("CLI 실행 후 포함 파일이 검토한 업데이트와 다릅니다. 일부 변경이 있을 수 있으니 설치 위치를 확인하세요.")
+                }
             }
         }
         return output
@@ -132,13 +147,13 @@ public struct SkillsCLIService: Sendable {
         return safe.isEmpty ? "unnamed-skill" : String(safe.prefix(255))
     }
 
-    private func base(_ key: String, fallback: String) throws -> URL {
+    func base(_ key: String, fallback: String) throws -> URL {
         guard let value = environment[key]?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return home.appendingPathComponent(fallback) }
         guard value.hasPrefix("/") else { throw failure("\(key)의 절대 경로를 확인하세요.") }
         return URL(fileURLWithPath: value)
     }
 
-    private func executableHash(_ url: URL) -> String? {
+    func executableHash(_ url: URL) -> String? {
         let resolved = url.resolvingSymlinksInPath()
         guard let info = try? resolved.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]), info.isRegularFile == true,
               (info.fileSize ?? Int.max) <= 64 * 1_024 * 1_024, FileManager.default.isExecutableFile(atPath: resolved.path),
@@ -146,27 +161,29 @@ public struct SkillsCLIService: Sendable {
         return resolved.path + ":" + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
-    private func validateVacant(_ path: String) throws {
-        var normalized = path
-        for alias in ["/tmp", "/var", "/etc"] where path == alias || path.hasPrefix(alias + "/") {
-            guard let physical = LibraryCatalog.physicalPath(alias) else { throw failure("시스템 경로를 확인할 수 없습니다.") }
-            normalized = physical + path.dropFirst(alias.count)
+    func validateVacant(_ path: String) throws {
+        try validateParents(path)
+        var info = stat()
+        if lstat(path, &info) != 0 {
+            guard errno == ENOENT else { throw failure("설치 경로 접근 상태를 확인할 수 없습니다.") }
+            return
         }
-        var current = "", info = stat()
-        let components = normalized.split(separator: "/")
-        for (index, part) in components.enumerated() {
-            current += "/" + part
-            if lstat(current, &info) != 0 {
-                guard errno == ENOENT else { throw failure("설치 경로 접근 상태를 확인할 수 없습니다.") }
-                return
+        throw failure("기존 설치와 충돌합니다: \(path). CLI로 덮어쓰지 않습니다.")
+    }
+
+    var receiptURL: URL {
+        get throws {
+            if let value = environment["XDG_STATE_HOME"], !value.isEmpty {
+                guard value.hasPrefix("/") else { throw failure("XDG_STATE_HOME의 절대 경로를 확인하세요.") }
+                return URL(fileURLWithPath: value).appendingPathComponent("skills/.skill-lock.json")
             }
-            guard index != components.count - 1 else { throw failure("기존 설치와 충돌합니다: \(path). CLI로 덮어쓰지 않습니다.") }
-            guard info.st_mode & S_IFMT == S_IFDIR else { throw failure("설치 경로에 링크 또는 일반 폴더가 아닌 항목이 있습니다: \(current)") }
+            return home.appendingPathComponent(".agents/.skill-lock.json")
         }
     }
 
-    private func receiptHash() throws -> String? {
-        let file = home.appendingPathComponent(".agents/.skill-lock.json")
+    func receiptHash() throws -> String? {
+        let file = try receiptURL
+        try validateParents(file.path)
         var info = stat()
         if lstat(file.path, &info) != 0 {
             guard errno == ENOENT else { throw failure("skills CLI 설치 기록을 확인할 수 없습니다.") }
@@ -179,7 +196,15 @@ public struct SkillsCLIService: Sendable {
         return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
-    private func run(_ executable: URL, arguments: [String], timeout: TimeInterval) throws -> String {
+    func validateVersion(_ executable: URL) throws {
+        let version = try run(executable, arguments: ["--version"], timeout: 10)
+        let pieces = version.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "v")).split(separator: ".").compactMap { Int($0) }
+        guard pieces.count == 3, pieces[0] == 1, pieces[1] > 7 || (pieces[1] == 7 && pieces[2] >= 4) else {
+            throw failure("이 연동은 skills CLI 1.7.4 이상의 1.x 버전이 필요합니다. CLI를 업데이트한 뒤 다시 확인하세요.")
+        }
+    }
+
+    func run(_ executable: URL, arguments: [String], timeout: TimeInterval) throws -> String {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("ahm-skills-cli-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -220,5 +245,5 @@ public struct SkillsCLIService: Sendable {
         return text
     }
 
-    private func failure(_ message: String) -> CatalogReadError { .inaccessible(message) }
+    func failure(_ message: String) -> CatalogReadError { .inaccessible(message) }
 }

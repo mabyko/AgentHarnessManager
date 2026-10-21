@@ -26,7 +26,7 @@ struct SettingsView: View {
     @AppStorage("appearance") private var appearance = "system"
     @State private var agentName = ""
     @State private var pathAgent: SkillAgent = .codex
-    @State private var page: SettingsPage = .connections
+    @State private var page: SettingsPage = .general
 
     init(pathAgent: SkillAgent = .codex) {
         _pathAgent = State(initialValue: pathAgent)
@@ -63,7 +63,7 @@ struct SettingsView: View {
                     case .connections: AgentIntegrationSection()
                     case .paths: pathSections
                     case .general:
-                        installMethodSection
+                        managementMethodSection
                         Section("화면") {
                             Picker("화면 모드", selection: $appearance) {
                                 Text("시스템 설정").tag("system")
@@ -83,12 +83,12 @@ struct SettingsView: View {
         .task { if !store.hasScanned && !store.isScanning { await store.rescan() } }
     }
 
-    private var installMethodSection: some View {
-        Section("스킬 설치") {
-            Picker("설치 방식", selection: Binding(get: { store.installMethod }, set: { store.setInstallMethod($0) })) {
-                Text("앱 직접 설치").tag(SkillInstallMethod.direct)
-                Text("skills CLI").tag(SkillInstallMethod.skillsCLI).disabled(store.skillsCLIExecutable == nil)
-            }.disabled(!store.canEditRoots).accessibilityIdentifier("settings.installMethod")
+    private var managementMethodSection: some View {
+        Section("스킬 관리") {
+            Picker("관리 도구", selection: Binding(get: { store.managementMethod }, set: { store.setManagementMethod($0) })) {
+                Text("앱 직접 관리").tag(SkillManagementMethod.direct)
+                Text("skills CLI").tag(SkillManagementMethod.skillsCLI).disabled(store.skillsCLIExecutable == nil)
+            }.disabled(!store.canEditRoots).accessibilityIdentifier("settings.managementMethod")
             LabeledContent("skills CLI", value: store.skillsCLIExecutable == nil ? "감지되지 않음" : "실행 파일 감지됨")
                 .accessibilityIdentifier("settings.skillsCLIStatus")
             if let executable = store.skillsCLIExecutable {
@@ -99,10 +99,17 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.refreshSkillsCLI")
                 Button("실행 파일 선택…") { store.chooseSkillsCLIExecutable() }.disabled(!store.canEditRoots)
             }
-            Text(store.installMethod == .skillsCLI
-                 ? "GitHub·로컬 설치를 감지된 skills CLI로 실행합니다. CLI가 설치 경로·복사 또는 링크·설치 기록을 관리하며 실행 전 명령과 경로를 검토합니다. CLI 1.7.4 이상의 1.x 버전이 필요합니다. 제거는 기존 앱의 복구 가능한 보관 방식을 유지합니다."
-                 : "앱이 파일을 복사하고 변경 이력으로 복구합니다. skills CLI 설치 기록은 변경하지 않습니다.")
+            Text(store.managementMethod == .skillsCLI
+                 ? "설치·삭제·업데이트를 모두 skills CLI로 실행합니다. 실행 전 명령과 영향 범위를 검토하며 CLI가 파일과 설치 기록을 관리합니다. 1.7.4 이상의 1.x 버전이 필요합니다."
+                 : "앱이 스킬을 복사 설치하고 삭제 시 복구용으로 보관합니다. CLI 설치 기록은 변경하지 않습니다. 업데이트 확인·적용은 skills CLI 관리에서 제공합니다.")
                 .font(.caption).foregroundStyle(.secondary)
+            LabeledContent("설치", value: store.managementMethod == .skillsCLI ? "CLI · GitHub / 로컬" : "앱 · 복사 설치")
+            LabeledContent("삭제", value: store.managementMethod == .skillsCLI ? "CLI · 파일 및 설치 기록 정리" : "앱 · 복구 가능한 보관")
+            LabeledContent("업데이트", value: store.managementMethod == .skillsCLI ? "읽기 전용 확인 → 검토 → CLI 적용" : "skills CLI 선택 필요")
+            if store.managementMethod == .skillsCLI {
+                Text("CLI 삭제는 영구 삭제이며 업데이트는 로컬 수정을 덮어씁니다. 앱 변경 이력의 자동 되돌리기는 제공하지 않습니다. 켜기·끄기는 기존 앱의 복구 가능한 전환을 사용합니다.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if store.skillsCLIExecutable == nil {
                 Text("전역 설치 또는 기존 npx·bunx 캐시에서 skills 실행 파일을 찾습니다. npx만 설치돼 있거나 CLI가 없어져도 자동 다운로드하거나 설치 방식을 바꾸지 않습니다.")
                     .font(.caption).foregroundStyle(.secondary)

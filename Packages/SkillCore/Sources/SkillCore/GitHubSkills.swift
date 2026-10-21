@@ -11,7 +11,13 @@ public struct GitHubSkillListing: Sendable {
     public let repository: SourceRepository
     public let skills: [GitHubSkillCandidate]
     public let reference: String?
+    public let trackingReference: String?
+    let treeHash: String?
     let files: [GitHubTreeItem]
+
+    public func folderHash(for skill: GitHubSkillCandidate) -> String? {
+        skill.path.isEmpty ? treeHash : files.first { $0.type == "tree" && $0.path == skill.path }?.sha
+    }
 }
 
 struct GitHubTreeItem: Decodable, Sendable {
@@ -44,20 +50,29 @@ public struct GitHubSkillService: Sendable {
 
     public init(session: URLSession? = nil) { self.session = session ?? Self.sharedSession }
 
-    public func list(repository input: String) async throws -> GitHubSkillListing {
+    public func list(repository input: String, reference: String? = nil) async throws -> GitHubSkillListing {
         guard let repository = SourceRepository(input), repository.url.host == "github.com" else {
             throw Self.failure("공개 GitHub 저장소의 루트 주소를 입력하세요. 예: https://github.com/owner/repo")
         }
         struct Commit: Decodable { let sha: String }
-        let commit = try JSONDecoder().decode(Commit.self, from: await fetch(endpoint(repository, path: "commits/HEAD"), limit: 8 * 1_024 * 1_024))
+        let ref: String
+        if reference == nil || reference == "HEAD" {
+            struct Repository: Decodable { let default_branch: String }
+            ref = try JSONDecoder().decode(Repository.self, from: await fetch(endpoint(repository, path: ""), limit: 2 * 1_024 * 1_024)).default_branch
+        } else { ref = reference! }
+        guard !ref.isEmpty, ref.count <= 200, !ref.hasPrefix("/"), !ref.contains(".."),
+              !ref.contains("?"), !ref.contains("#"), !ref.contains("\\"),
+              !ref.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else { throw Self.failure("업데이트 기준 브랜치·태그를 확인하세요.") }
+        let encoded = ref.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/%?#")))!
+        let commit = try JSONDecoder().decode(Commit.self, from: await fetch(endpoint(repository, path: "commits/" + encoded), limit: 8 * 1_024 * 1_024))
         guard Self.validSHA(commit.sha) else { throw Self.failure("GitHub 버전 정보를 확인할 수 없습니다.") }
         let url = endpoint(repository, path: "git/trees/" + commit.sha + "?recursive=1")
         let data = try await fetch(url, limit: 8 * 1_024 * 1_024)
-        return try Self.parse(data, repository: repository, reference: commit.sha)
+        return try Self.parse(data, repository: repository, reference: commit.sha, trackingReference: ref)
     }
 
-    static func parse(_ data: Data, repository: SourceRepository, reference: String? = nil) throws -> GitHubSkillListing {
-        struct Tree: Decodable { let tree: [GitHubTreeItem]; let truncated: Bool }
+    static func parse(_ data: Data, repository: SourceRepository, reference: String? = nil, trackingReference: String? = nil) throws -> GitHubSkillListing {
+        struct Tree: Decodable { let tree: [GitHubTreeItem]; let truncated: Bool; let sha: String? }
         let response = try JSONDecoder().decode(Tree.self, from: data)
         guard !response.truncated, response.tree.count <= 100_000 else {
             throw failure("저장소가 너무 커 전체 목록을 확인할 수 없습니다. 스킬만 담은 작은 저장소를 사용하세요.")
@@ -76,7 +91,42 @@ public struct GitHubSkillService: Sendable {
         }.filter { !$0.name.hasPrefix(".") }.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
         guard !skills.isEmpty else { throw failure("이 저장소에서 설치 가능한 SKILL.md를 찾지 못했습니다.") }
         guard skills.count <= 1_000 else { throw failure("스킬이 1,000개를 넘습니다. 더 작은 저장소를 선택하세요.") }
-        return GitHubSkillListing(repository: repository, skills: skills, reference: reference, files: response.tree)
+        return GitHubSkillListing(repository: repository, skills: skills, reference: reference, trackingReference: trackingReference, treeHash: response.sha, files: response.tree)
+    }
+
+    public static func contentMatches(folder: URL, skill: GitHubSkillCandidate, listing: GitHubSkillListing) throws -> Bool {
+        let prefix = skill.path.isEmpty ? "" : skill.path + "/"
+        let remote = listing.files.filter { $0.path.hasPrefix(prefix) && $0.type != "tree" }
+        guard remote.allSatisfy({ $0.type == "blob" && ["100644", "100755"].contains($0.mode) }), remote.count <= 10_000 else {
+            throw failure("원격 스킬에 지원하지 않는 링크·항목이 있습니다.")
+        }
+        let expected = Dictionary(uniqueKeysWithValues: remote.map { (String($0.path.dropFirst(prefix.count)), $0.sha) })
+        return try contentHashes(folder: folder) == expected
+    }
+
+    public static func contentHashes(folder: URL) throws -> [String: String] {
+        let before = try LibraryService.fingerprintDirectory(folder)
+        guard let rootPath = LibraryCatalog.physicalPath(folder.path) else { throw failure("설치 폴더 경로를 확인할 수 없습니다.") }
+        guard let enumerator = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey]) else {
+            throw failure("설치 파일을 비교할 수 없습니다.")
+        }
+        var observed: [String: String] = [:], bytes = 0, count = 0
+        for case let file as URL in enumerator {
+            count += 1
+            let info = try file.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey])
+            guard count <= 10_000, info.isSymbolicLink != true else { throw failure("설치 파일에 링크 또는 너무 많은 항목이 있습니다.") }
+            if info.isDirectory == true { continue }
+            guard info.isRegularFile == true, let size = info.fileSize, size <= 64 * 1_024 * 1_024 - bytes else { throw failure("설치 파일의 형식·크기를 확인하세요.") }
+            bytes += size
+            let data = try Data(contentsOf: file)
+            guard data.count == size else { throw failure("비교 중 설치 파일이 바뀌었습니다.") }
+            var framed = Data("blob \(data.count)\0".utf8); framed.append(data)
+            guard let physical = LibraryCatalog.physicalPath(file.path), physical.hasPrefix(rootPath + "/") else { throw failure("설치 폴더 밖의 파일은 비교할 수 없습니다.") }
+            let relative = String(physical.dropFirst(rootPath.count + 1))
+            observed[relative] = Insecure.SHA1.hash(data: framed).map { String(format: "%02x", $0) }.joined()
+        }
+        guard try LibraryService.fingerprintDirectory(folder) == before else { throw failure("비교 중 설치 파일이 바뀌었습니다.") }
+        return observed
     }
 
     public func download(_ skill: GitHubSkillCandidate, from listing: GitHubSkillListing) async throws -> GitHubSkillDownload {
@@ -119,7 +169,7 @@ public struct GitHubSkillService: Sendable {
     }
 
     private func endpoint(_ repository: SourceRepository, path: String) -> URL {
-        URL(string: "https://api.github.com/repos/" + repository.name + "/" + path)!
+        URL(string: "https://api.github.com/repos/" + repository.name + (path.isEmpty ? "" : "/" + path))!
     }
 
     private func fetch(_ url: URL, limit: Int, raw: Bool = false) async throws -> Data {

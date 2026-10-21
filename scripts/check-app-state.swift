@@ -817,35 +817,115 @@ struct AppStateCheck {
         try """
         #!/bin/sh
         if [ "$1" = "--version" ]; then echo 1.7.4; exit 0; fi
+        printf '%s\\n' "$@" > "$HOME/cli-arguments"
+        if [ "$1" = "remove" ]; then
+            rm -rf -- "$HOME/.agents/skills/cli-example"
+            echo removed
+            exit 0
+        fi
+        rm -rf -- "$HOME/.agents/skills/cli-example"
         mkdir -p "$HOME/.agents/skills/cli-example"
-        cp "$AHM_FIXTURE_SOURCE/SKILL.md" "$HOME/.agents/skills/cli-example/SKILL.md"
+        cp -R "$AHM_FIXTURE_SOURCE/." "$HOME/.agents/skills/cli-example/"
         echo installed
         """.write(to: executable, atomically: true, encoding: .utf8)
         try files.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
         let service = SkillsCLIService(home: home, environment: ["AHM_FIXTURE_SOURCE": source.path],
             detector: AgentInstallationDetector(executableDirectories: [bin, URL(fileURLWithPath: "/bin"), URL(fileURLWithPath: "/usr/bin")], applicationDirectories: []))
-        let store = AppStore(defaults: defaults, home: home, skillsCLIService: service)
+        let store = AppStore(defaults: defaults, home: home, skillsCLIService: service, gitHubSkills: SkillUpdateFixture.service())
         await store.rescan()
-        check(store.installMethod == .direct && store.skillsCLIExecutable == executable)
-        store.setInstallMethod(.skillsCLI)
-        check(AppStore(defaults: defaults, home: home, skillsCLIService: service).installMethod == .skillsCLI, "Install method must persist")
+        check(store.managementMethod == .direct && store.skillsCLIExecutable == executable)
+        store.setManagementMethod(.skillsCLI)
+        check(AppStore(defaults: defaults, home: home, skillsCLIService: service).managementMethod == .skillsCLI, "Install method must persist")
         guard let plan = await store.prepareSkillsCLIInstallation(source: source, agent: .codex, remoteSource: nil) else { check(false, store.libraryMessage ?? "CLI prepare failed"); return }
         store.presentSkillsCLIInstall(plan, download: nil)
         check(!store.metadataIsEditable && !store.canEditRoots && !store.canChangeFiles, "CLI review must lock other file changes")
-        store.cancelSkillsCLIInstall()
+        store.cancelSkillsCLIChange()
         check(store.skills.isEmpty && store.canEditRoots, "Cancel must not install")
         store.presentSkillsCLIInstall(plan, download: nil)
-        await store.applySkillsCLIInstall()
-        check(!store.skillsCLIInstallFailed && store.skillsCLIInstallPreview == nil && store.selectedSkill?.name == "cli-example", store.libraryMessage ?? "CLI install failed")
+        await store.applySkillsCLIChange()
+        check(!store.skillsCLIFailed && store.skillsCLIPreview == nil && store.selectedSkill?.name == "cli-example", store.libraryMessage ?? "CLI install failed")
         check(store.journal.completed.isEmpty, "External CLI install must not pretend to be an app-journal operation")
+        await store.checkSkillUpdates()
+        check(store.updateChecks.values.allSatisfy { $0.status == .unavailable }, "Missing receipt must not report latest or update availability")
+        check(store.lastUpdatesChecked != nil && !store.isCheckingUpdates)
+        let receipt = home.appendingPathComponent(".agents/.skill-lock.json")
+        let receiptData = try JSONSerialization.data(withJSONObject: ["version": 3, "skills": ["cli-example": ["source": "fixture/cli", "sourceType": "github", "ref": "main", "skillPath": "skills/cli-example/SKILL.md", "skillFolderHash": String(repeating: "0", count: 40)]]])
+        try receiptData.write(to: receipt)
+        let installedDocument = home.appendingPathComponent(".agents/skills/cli-example/SKILL.md")
+        let originalDocument = try Data(contentsOf: installedDocument)
+        let arguments = try Data(contentsOf: home.appendingPathComponent("cli-arguments"))
+        await store.checkSkillUpdates()
+        check(store.availableUpdateCount == 1 && store.updateChecks[store.skills[0].id]?.status == .available)
+        check(try Data(contentsOf: receipt) == receiptData && Data(contentsOf: installedDocument) == originalDocument,
+              "Update checks must not change files or CLI receipts")
+        check(try Data(contentsOf: home.appendingPathComponent("cli-arguments")) == arguments, "Read-only checks must never run skills check/update")
+        let pinnedVersion = try JSONSerialization.data(withJSONObject: ["version": 3, "skills": ["cli-example": ["source": "fixture/cli", "sourceType": "github", "ref": String(repeating: "d", count: 40), "skillPath": "skills/cli-example/SKILL.md", "skillFolderHash": String(repeating: "0", count: 40)]]])
+        try pinnedVersion.write(to: receipt)
+        await store.checkSkillUpdates()
+        check(store.updateChecks[store.skills[0].id]?.listing?.trackingReference == "main", "Resolve the actual default branch instead of passing HEAD to CLI clone")
+        await store.prepareSkillUpdate(store.skills[0])
+        check(store.skillsCLIPreview?.trackedReference == "main", "Pinned installations must update against the resolved branch")
+        store.cancelSkillsCLIChange()
+        let sameVersion = try JSONSerialization.data(withJSONObject: ["version": 3, "skills": ["cli-example": ["source": "fixture/cli", "sourceType": "github", "ref": "main", "skillPath": "skills/cli-example/SKILL.md", "skillFolderHash": String(repeating: "c", count: 40)]]])
+        try sameVersion.write(to: receipt)
+        await store.checkSkillUpdates()
+        check(store.availableUpdateCount == 0 && store.updateChecks[store.skills[0].id]?.status == .modified,
+              "Local changes alone must not be counted as an upstream update")
+        try receiptData.write(to: receipt)
+        await store.checkSkillUpdates()
+        store.libraryFilter = .updates
+        check(store.filteredSkills.count == 1, "Update filter must show available updates")
+        let previousID = store.skills[0].id
+        store.toggleFavorite(previousID)
+        check(store.saveGroup(SkillGroup(name: "Update preservation", skillIDs: [previousID])))
+        try SkillUpdateFixture.body("cli-example").write(to: source.appendingPathComponent("SKILL.md"))
+        try Data([1,2,3]).write(to: source.appendingPathComponent("resource.bin"))
+        await store.prepareSkillUpdate(store.skills[0])
+        check(store.skillsCLIPreview?.operation == .update && store.skillsCLIPreview?.arguments.first == "add")
+        let staged = store.skillsCLIPreview!.sourceFolder!
+        store.cancelSkillsCLIChange()
+        check(!files.fileExists(atPath: staged.path), "Cancelling update must clean the downloaded review")
+        check(try Data(contentsOf: installedDocument) == originalDocument, "Cancelling update must preserve local edits")
+        await store.prepareSkillUpdate(store.skills[0])
+        await store.applySkillsCLIChange()
+        check(try Data(contentsOf: installedDocument) == SkillUpdateFixture.body("cli-example"), store.libraryMessage ?? "CLI update failed")
+        check(store.journal.completed.isEmpty && store.skillsCLIPreview == nil)
+        check(store.preferences.favorites.contains(store.skills[0].id) && store.groups[0].skillIDs.contains(store.skills[0].id),
+              "CLI replacement must preserve favorites and group membership")
+        await store.checkSkillUpdates()
+        check(store.availableUpdateCount == 0 && store.updateChecks[store.skills[0].id]?.status == .current,
+              "All resource contents must compare equal after CLI update")
+        let unavailableSource = try JSONSerialization.data(withJSONObject: ["version": 3, "skills": ["cli-example": ["source": "fixture/unavailable", "sourceType": "github", "ref": "main", "skillPath": "skills/cli-example/SKILL.md"]]])
+        try unavailableSource.write(to: receipt)
+        await store.checkSkillUpdates()
+        check(store.availableUpdateCount == 0 && store.updateChecks[store.skills[0].id]?.status == .failed,
+              "Offline or failed remote checks must never claim to be current")
+        try receiptData.write(to: receipt)
+        let beforeRemoval = store.allInstallations
+        await store.prepareRemoval(beforeRemoval, allAgents: true)
+        check(store.skillsCLIPreview?.operation == .remove && store.mutationPreview == nil, "CLI setting must route removal through CLI")
+        store.cancelSkillsCLIChange()
+        check(store.skills.count == 1, "Cancel CLI removal must preserve installed files")
         try files.removeItem(at: executable)
         store.refreshSkillsCLI()
-        check(store.skillsCLIExecutable == nil && store.installMethod == .skillsCLI, "Missing CLI must preserve the user's choice")
+        check(store.skillsCLIExecutable == nil && store.managementMethod == .skillsCLI, "Missing CLI must preserve the user's choice")
         let unavailable = await store.prepareSkillsCLIInstallation(source: source, agent: .codex, remoteSource: nil)
         check(unavailable == nil, "Missing CLI must not silently fall back to direct installation")
-        store.setInstallMethod(.direct)
-        check(store.installMethod == .direct)
-        print("PASS: CLI detection, persisted install method, review locks/cancel, scoped CLI installation, selection and missing-CLI behavior")
+        await store.prepareRemoval(beforeRemoval, allAgents: true)
+        check(store.mutationPreview == nil && store.skillsCLIPreview == nil, "Missing CLI must not fall back to app archive removal")
+        try """
+        #!/bin/sh
+        if [ "$1" = "--version" ]; then echo 1.7.4; exit 0; fi
+        rm -rf -- "$HOME/.agents/skills/cli-example"
+        """.write(to: executable, atomically: true, encoding: .utf8)
+        try files.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+        store.refreshSkillsCLI()
+        await store.prepareRemoval(beforeRemoval, allAgents: true)
+        await store.applySkillsCLIChange()
+        check(store.skills.isEmpty && store.journal.completed.isEmpty, "CLI removal must execute CLI and leave no app archive journal")
+        store.setManagementMethod(.direct)
+        check(store.managementMethod == .direct)
+        print("PASS: persisted CLI lifecycle tool, read-only remote/resource comparison, update/local-difference/current/offline states and filter, reviewed scoped update/cancel, metadata preservation, actual CLI deletion routing and missing-CLI fallback prevention")
     }
 
 }

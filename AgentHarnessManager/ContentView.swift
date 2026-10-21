@@ -8,7 +8,7 @@ struct ContentView: View {
     @State private var groupEditor: SkillGroup?
     @State private var showsInstaller = false
     @State private var installationPlan: MutationPlan?
-    @State private var preparedCLIInstall: (SkillsCLIInstallPlan, GitHubSkillDownload?)?
+    @State private var preparedCLIInstall: (SkillsCLIPlan, GitHubSkillDownload?)?
 
     var body: some View {
         @Bindable var store = store
@@ -37,7 +37,10 @@ struct ContentView: View {
                             .accessibilityIdentifier("instructions.counts")
                             .help("파일 탐지는 현재 에이전트 세션의 지침 로딩을 확인하지 않습니다.")
                     }
-                    else if store.isScanning || store.isPreparingChange { ProgressView().controlSize(.mini); Text(store.isPreparingChange ? "변경 계획 확인 중" : "확인 중") }
+                    else if store.isScanning || store.isPreparingChange || store.isCheckingUpdates {
+                        ProgressView().controlSize(.mini)
+                        Text(store.isCheckingUpdates ? store.updatesProgress : store.isPreparingChange ? "변경 계획 확인 중" : "확인 중").lineLimit(1)
+                    }
                     else { Text("스킬 \(store.skills.count) · 설치 \(store.allInstallations.count)") }
                     Spacer()
                     if store.page != .instructions, let date = store.lastScanned { Text(date, format: .dateTime.hour().minute()) }
@@ -84,7 +87,7 @@ struct ContentView: View {
                     if store.page == .instructions { await store.instructions.refresh(); await store.instructions.loadBackups() }
                     else { await store.rescan() }
                 } } label: { Label("새로고침", systemImage: "arrow.clockwise") }
-                    .disabled(store.isScanning || store.isMutating || store.isPreparingChange || store.instructions.busy).help("현재 목록 다시 확인 (⌘R)")
+                    .disabled(store.isScanning || store.isMutating || store.isPreparingChange || store.isCheckingUpdates || store.instructions.busy).help("현재 목록 다시 확인 (⌘R)")
             }
             ToolbarItem {
                 if store.page != .instructions { Button { store.runLocalReview() } label: { Label("검사", systemImage: "checkmark.shield") }
@@ -104,7 +107,7 @@ struct ContentView: View {
             SkillInstallSheet(onPrepared: { installationPlan = $0 }, onCLIPrepared: { preparedCLIInstall = ($0, $1) })
         }
         .sheet(item: $groupEditor) { GroupEditor(group: $0) }
-        .sheet(item: $store.skillsCLIInstallPreview, onDismiss: { store.cancelSkillsCLIInstall() }) { SkillsCLIInstallReview(plan: $0) }
+        .sheet(item: $store.skillsCLIPreview, onDismiss: { store.cancelSkillsCLIChange() }) { SkillsCLIReview(plan: $0) }
         .sheet(item: $store.mutationPreview, onDismiss: { store.cancelPreview() }) { MutationPreview(plan: $0) }
         .sheet(item: Binding(get: { store.instructions.preview }, set: { store.instructions.preview = $0 })) {
             InstructionChangeReview(plan: $0, editor: store.instructions)
@@ -152,7 +155,29 @@ struct ContentView: View {
                 }.pickerStyle(.segmented).labelsHidden()
                     .accessibilityLabel("활동 항목").accessibilityIdentifier("workbench.activitySection")
             }
-            if store.page == .library { LibraryFilters() }
+            if store.page == .library {
+                LibraryFilters()
+                HStack(spacing: 8) {
+                    Button { Task { await store.checkSkillUpdates() } } label: {
+                        if store.isCheckingUpdates { ProgressView().controlSize(.small); Text("업데이트 확인 중…") }
+                        else { Label("업데이트 확인", systemImage: "arrow.triangle.2.circlepath") }
+                    }.disabled(!store.canCheckUpdates || store.skills.isEmpty)
+                        .accessibilityIdentifier("library.checkUpdates")
+                        .help("파일을 바꾸지 않고 CLI 설치 기록의 원격 출처와 포함 파일을 비교합니다.")
+                    Spacer(minLength: 0)
+                    if store.availableUpdateCount > 0 && store.libraryFilter != .updates {
+                        Button("업데이트 \(store.availableUpdateCount)개 보기") { store.libraryFilter = .updates }
+                            .font(.caption).accessibilityIdentifier("library.showUpdates")
+                    } else if let date = store.lastUpdatesChecked {
+                        Text(date, format: .dateTime.hour().minute()).font(.caption).foregroundStyle(.secondary)
+                            .help("업데이트를 확인한 시각입니다. 확인 불가·실패 항목은 각 스킬 상세에서 확인하세요.")
+                    }
+                }
+                if store.managementMethod != .skillsCLI {
+                    Button("설정에서 skills CLI 관리 선택…") { openSettings() }
+                        .font(.caption).buttonStyle(.plain).foregroundStyle(.secondary)
+                }
+            }
             if store.page == .groups {
                 Picker("그룹 전환", selection: Binding(get: { store.preferences.groupSelectionMode }, set: { store.setGroupMode($0) })) {
                     Text("여러 그룹 함께 켜기").tag(GroupSelectionMode.multiple)
@@ -438,6 +463,10 @@ private struct SkillListRow: View {
                     if store.preferences.favorites.contains(skill.id) { Image(systemName: "star.fill").font(.caption).accessibilityLabel("즐겨찾기") }
                 }
                 Text(skill.summary).font(.caption).foregroundStyle(WorkbenchTheme.sidebarSecondary).lineLimit(2)
+                if let check = store.updateChecks[skill.id], check.status == .available || check.status == .modified || check.status == .failed {
+                    Label(check.title, systemImage: check.symbol).font(.caption.weight(.medium))
+                        .foregroundStyle(check.status == .available ? WorkbenchTheme.accent : WorkbenchTheme.warning)
+                }
                                 HStack(spacing: 6) {
                     Text("설치 \(skill.installations.count)")
                     Text(stateTitle)

@@ -33,7 +33,7 @@ swiftc -swift-version 6 -I "$settings_check_dir" -L "$settings_check_dir" -lSkil
     AgentHarnessManager/GroupEditor.swift AgentHarnessManager/ProfilesView.swift \
     AgentHarnessManager/SourceEditorSheet.swift AgentHarnessManager/AgentRequestDetail.swift \
     AgentHarnessManager/InstructionStore.swift AgentHarnessManager/InstructionViews.swift \
-    "$settings_check_source" -o "$settings_check_app/MacOS/check"
+    scripts/skill-update-fixture.swift "$settings_check_source" -o "$settings_check_app/MacOS/check"
 python3 - "$settings_check_app/MacOS/check" <<'PY'
 import subprocess
 import sys
