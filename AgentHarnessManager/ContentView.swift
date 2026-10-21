@@ -54,7 +54,13 @@ struct ContentView: View {
                 notices
                 switch store.page {
                 case .library:
-                    if let skill = store.selectedSkill { LibrarySkillDetail(skill: skill).id(skill.id) }
+                    if store.selectedSkills.count > 1 {
+                        ContentUnavailableView("\(store.selectedSkills.count)개 스킬 선택", systemImage: "checklist",
+                            description: Text(store.managementMethod == .skillsCLI
+                                ? "목록 위의 CLI 삭제 버튼에서 선택한 스킬과 전체 설치 범위를 검토하세요."
+                                : "일괄 삭제는 설정 → 일반에서 skills CLI 관리 도구를 선택하면 사용할 수 있습니다."))
+                    }
+                    else if let skill = store.selectedSkill { LibrarySkillDetail(skill: skill).id(skill.id) }
                     else { selectionPrompt(store.selectedSkillID == nil ? "스킬을 선택하세요" : "선택한 스킬을 찾을 수 없습니다", symbol: "doc.text", description: "설치 위치와 상태, 그룹, SKILL.md 원문을 확인할 수 있습니다.") }
                 case .groups:
                     if let group = store.selectedGroup { GroupDetail(group: group) { groupEditor = group } }
@@ -98,7 +104,7 @@ struct ContentView: View {
         }
         .searchable(text: $store.search, placement: .toolbar, prompt: store.page == .instructions ? "지침 파일 이름 또는 경로 검색" : store.page == .requests ? "요청 제목 또는 ID 검색" : "이름, 설명 또는 경로 검색")
         .onChange(of: [store.search, store.libraryFilter.rawValue, store.groupFilterID?.uuidString ?? "", store.agentFilter?.rawValue ?? "", store.rootFilterID ?? "", store.sourceFilterID ?? "", String(store.linksOnly)]) { _, _ in
-            if let id = store.selectedSkillID, !store.filteredSkills.contains(where: { $0.id == id }) { store.selectedSkillID = nil }
+            store.selectSkills(store.selectedSkillIDs)
         }
         .sheet(isPresented: $showsInstaller, onDismiss: {
             if let plan = installationPlan { store.mutationPreview = plan; installationPlan = nil }
@@ -160,10 +166,10 @@ struct ContentView: View {
                 HStack(spacing: 8) {
                     Button { Task { await store.checkSkillUpdates() } } label: {
                         if store.isCheckingUpdates { ProgressView().controlSize(.small); Text("업데이트 확인 중…") }
-                        else { Label("업데이트 확인", systemImage: "arrow.triangle.2.circlepath") }
+                        else { Label("전체 업데이트 확인", systemImage: "arrow.triangle.2.circlepath") }
                     }.disabled(!store.canCheckUpdates || store.skills.isEmpty)
                         .accessibilityIdentifier("library.checkUpdates")
-                        .help("파일을 바꾸지 않고 CLI 설치 기록의 원격 출처와 포함 파일을 비교합니다.")
+                        .help("현재 필터와 관계없이 전체 스킬의 업데이트 유무를 확인합니다. 파일을 바꾸지 않으며, 실제 적용은 각 스킬의 업데이트 검토에서 진행합니다.")
                     Spacer(minLength: 0)
                     if store.availableUpdateCount > 0 && store.libraryFilter != .updates {
                         Button("업데이트 \(store.availableUpdateCount)개 보기") { store.libraryFilter = .updates }
@@ -171,6 +177,17 @@ struct ContentView: View {
                     } else if let date = store.lastUpdatesChecked {
                         Text(date, format: .dateTime.hour().minute()).font(.caption).foregroundStyle(.secondary)
                             .help("업데이트를 확인한 시각입니다. 확인 불가·실패 항목은 각 스킬 상세에서 확인하세요.")
+                    }
+                }
+                if store.selectedSkillIDs.count > 1 && store.managementMethod == .skillsCLI {
+                    HStack {
+                        Button { Task { await store.prepareSelectedSkillsRemoval() } } label: {
+                            Label("선택한 \(store.selectedSkills.count)개 CLI 삭제…", systemImage: "trash")
+                        }.disabled(!store.canChangeFiles || store.mutationPreview != nil)
+                            .accessibilityIdentifier("library.removeSelected")
+                        Spacer(minLength: 0)
+                        Button("선택 해제") { store.selectSkills([]) }.buttonStyle(.plain).font(.caption)
+                            .disabled(!store.metadataIsEditable)
                     }
                 }
                 if store.managementMethod != .skillsCLI {
@@ -210,13 +227,15 @@ struct ContentView: View {
     }
     private var skillList: some View {
         @Bindable var store = store
-        return List(selection: $store.selectedSkillID) {
+        return List(selection: Binding(get: { store.selectedSkillIDs }, set: { store.selectSkills($0) })) {
             ForEach(store.filteredSkills) { skill in
                 SkillListRow(skill: skill).tag(skill.id)
-                    .listRowBackground(RoundedRectangle(cornerRadius: 8).fill(store.selectedSkillID == skill.id ? WorkbenchTheme.selection : WorkbenchTheme.surface).padding(.vertical, 3))
+                    .listRowBackground(RoundedRectangle(cornerRadius: 8).fill(store.selectedSkillIDs.contains(skill.id) ? WorkbenchTheme.selection : WorkbenchTheme.surface).padding(.vertical, 3))
             }
         }
         .listStyle(.inset).scrollContentBackground(.hidden)
+        .accessibilityIdentifier("library.skillList")
+        .help("⌘클릭 또는 ⇧클릭으로 여러 스킬을 선택할 수 있습니다. ⌘A는 현재 목록 전체를 선택합니다.")
         .overlay { if store.filteredSkills.isEmpty { emptyList("스킬이 없습니다", description: store.hasFilters ? "검색어나 필터를 바꿔 보세요." : "위의 설치 버튼으로 스킬을 추가하세요. 기존 폴더는 설정에서 등록할 수 있습니다.") } }
     }
 

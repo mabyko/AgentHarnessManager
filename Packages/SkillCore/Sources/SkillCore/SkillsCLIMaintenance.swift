@@ -138,35 +138,42 @@ extension SkillsCLIService {
     public func prepareRemoval(installations: [SkillInstallation], allInstallations: [SkillInstallation], executable: URL, allAgents: Bool = false) throws -> SkillsCLIPlan {
         guard !installations.isEmpty, let binaryHash = executableHash(executable) else { throw failure("삭제할 설치와 skills CLI를 확인하세요.") }
         try validateVersion(executable)
-        let names = Set(installations.map { URL(fileURLWithPath: $0.originalPath).lastPathComponent })
-        guard names.count == 1, let folderName = names.first else { throw failure("서로 다른 설치 이름은 하나씩 삭제하세요.") }
-        let name = try matchingName(folderName, entries: receiptEntries())
+        let folderNames = Set(installations.map { URL(fileURLWithPath: $0.originalPath).lastPathComponent }).sorted()
+        guard allAgents || folderNames.count == 1 else { throw failure("여러 스킬은 스킬 전체의 CLI 삭제에서 함께 검토하세요.") }
+        let entries = try receiptEntries()
+        let names = try folderNames.map { try matchingName($0, entries: entries) }
         let agents = try Set(installations.map { try validateInstallation($0, removal: true) }).sorted { $0.rawValue < $1.rawValue }
         let scopedAgents = allAgents ? SkillAgent.allCases.filter { $0 != .custom } : agents
-        let legacy = try scopedAgents.flatMap { try legacyLinkRoots($0, name: folderName) }
-        let roots = (try scopedAgents.flatMap(removalRoots)) + legacy
-        let paths = Set(roots.map { $0.url.appendingPathComponent(folderName).path }).sorted()
-        let canonical = canonicalRoot().url.appendingPathComponent(folderName).path
+        let nativeRoots = try scopedAgents.flatMap(removalRoots)
+        var roots = nativeRoots, legacyPaths: [String] = []
+        for folder in folderNames {
+            let legacy = try scopedAgents.flatMap { try legacyLinkRoots($0, name: folder) }
+            roots += legacy
+            legacyPaths += legacy.map { $0.url.appendingPathComponent(folder).path }
+        }
+        let paths = Set(nativeRoots.flatMap { root in folderNames.map { root.url.appendingPathComponent($0).path } } + legacyPaths).sorted()
+        let canonicals = Set(folderNames.map { canonicalRoot().url.appendingPathComponent($0).path })
         let selected = Set(installations.map(\.originalPath))
-        let canonicalPhysical = LibraryCatalog.physicalPath(canonical)
+        let canonicalPhysical = Set(canonicals.compactMap(LibraryCatalog.physicalPath))
         guard !allInstallations.contains(where: { item in
-            canonicalPhysical != nil && item.isSymbolicLink && !selected.contains(item.originalPath)
+            item.isSymbolicLink && !selected.contains(item.originalPath)
                 && !(allAgents && paths.contains(item.originalPath))
-                && item.resolvedPath.flatMap(LibraryCatalog.physicalPath) == canonicalPhysical
+                && item.resolvedPath.flatMap(LibraryCatalog.physicalPath).map(canonicalPhysical.contains) == true
         }) else { throw failure("다른 설치 링크도 이 공유 원본을 사용합니다. 스킬 전체의 CLI 삭제에서 함께 검토하세요.") }
         var states: [String: String] = [:]
         for path in paths { states[path] = try pathState(path) }
-        let expected = installations.map(\.originalPath).filter { allAgents || $0 != canonical }
+        let expected = installations.map(\.originalPath).filter { allAgents || !canonicals.contains($0) }
         guard !expected.isEmpty else { throw failure("이 공유 설치는 에이전트 하나에서만 삭제할 수 없습니다. 스킬 전체의 CLI 삭제에서 검토하세요.") }
         var plan = SkillsCLIPlan(executable: executable,
-            arguments: ["remove", name, "--global"] + (allAgents ? [] : ["--agent"] + agents.map(agentID)) + ["--yes"],
-            name: name, agent: agents[0], checkedPaths: paths, expectedPaths: expected, roots: roots,
+            arguments: ["remove"] + names + ["--global"] + (allAgents ? [] : ["--agent"] + agents.map(agentID)) + ["--yes"],
+            name: names.count == 1 ? names[0] : "\(names.count)개 스킬", agent: agents[0], checkedPaths: paths, expectedPaths: expected, roots: roots,
             sourceFolder: nil, sourceHash: nil, executableHash: binaryHash, receiptHash: try receiptHash(), documentHash: nil)
         plan.operation = .remove; plan.pathStates = states
-        plan.legacyLinkCleanup = legacy.map { $0.url.appendingPathComponent(folderName).path }
+        plan.removalNames = names
+        plan.legacyLinkCleanup = legacyPaths
         plan.scopeNote = "대상 에이전트: " + (allAgents ? "CLI가 인식하는 모든 에이전트(현재 목록 밖의 동명 설치 포함)" : agents.map(\.displayName).joined(separator: ", "))
             + ". CLI가 해당 설치·이전 경로를 영구 삭제하고, 사용 여부에 따라 공유 원본과 설치 기록도 정리합니다. 앱의 보관·자동 되돌리기는 제공하지 않습니다."
-            + (legacy.isEmpty ? "" : " CLI가 남긴 아래 이전 경로의 설치 링크만 앱이 정리합니다: " + plan.legacyLinkCleanup.joined(separator: ", "))
+            + (legacyPaths.isEmpty ? "" : " CLI가 남긴 아래 이전 경로의 설치 링크만 앱이 정리합니다: " + legacyPaths.joined(separator: ", "))
         return plan
     }
 

@@ -649,6 +649,10 @@ struct SkillsCLIReview: View {
             Text(plan.name).font(.headline)
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
+                    if plan.removalNames.count > 1 {
+                        Text("삭제할 스킬 · \(plan.removalNames.count)개").font(.headline)
+                        ForEach(plan.removalNames, id: \.self) { Text($0).font(.callout) }
+                    }
                     Text("실행할 명령").font(.headline)
                     Text(plan.command).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                     if let commit = plan.reviewedCommit {

@@ -214,6 +214,19 @@ import SwiftUI
         key(53)
         wait("Escape must cancel CLI delete") { !elements(app).contains { string($0, "AXRole") == "AXSheet" } }
         check(FileManager.default.fileExists(atPath: home.appendingPathComponent(".agents/skills/keyboard-demo/SKILL.md").path), "Cancelled CLI changes must preserve source")
+        selectMenu("library.scope", "전체 · 2")
+        focus(find("library.skillList"))
+        key(0, flags: .maskCommand)
+        wait("Command-A must select all visible skills") { ["AXDescription", "AXTitle"].contains { string(find("library.removeSelected"), $0).contains("2개") } }
+        press("library.removeSelected")
+        wait("Batch delete review must open") { elements(app).contains { string($0, "AXIdentifier") == "library.applyCLIChange" } }
+        check(elements(app).contains { string($0, "AXValue").contains("삭제할 스킬 · 2개") }, "Batch review must list its selected skill count")
+        check(elements(app).contains { string($0, "AXValue").contains("keyboard-demo") } && elements(app).contains { string($0, "AXValue").contains("voiceover-demo") }, "Batch review must name every selected skill")
+        try Data().write(to: home.appendingPathComponent("capture.batch"))
+        wait("Batch review screenshots were not captured") { FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.batch.done").path) }
+        key(53)
+        wait("Escape must cancel batch deletion") { !elements(app).contains { string($0, "AXRole") == "AXSheet" } }
+        check(FileManager.default.fileExists(atPath: home.appendingPathComponent(".agents/skills/keyboard-demo/SKILL.md").path), "Cancelled batch must preserve source")
         press("library.install", expecting: "library.installAgent.codex")
         check(elements(app).filter { string($0, "AXIdentifier").hasPrefix("library.installAgent.") }.count == 8, "CLI install must expose all eight agents as independent checkboxes")
         check((value(find("library.installAgent.codex"), "AXValue") as? NSNumber)?.boolValue == true, "CLI install must preserve the initial Codex choice")
@@ -310,6 +323,11 @@ import SwiftUI
     @MainActor static func fixture(_ suite: String) throws {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
+        // Match the standard Edit menu supplied by the production SwiftUI App scene.
+        let menu = NSMenu(), edit = NSMenu(title: "Edit"), item = NSMenuItem()
+        item.submenu = edit; menu.addItem(item)
+        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        app.mainMenu = menu
         let home = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent().appendingPathComponent("home")
         for path in [".agents/skills/keyboard-demo", ".claude/skills/voiceover-demo"] {
             let folder = home.appendingPathComponent(path)
@@ -380,6 +398,20 @@ import SwiftUI
                         }
                     }
                     try? Data().write(to: home.appendingPathComponent("capture.lifecycle.done"))
+                }
+                if FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.batch").path),
+                   !FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.batch.done").path),
+                   let sheet = library.attachedSheet, let view = sheet.contentView {
+                    for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
+                        sheet.appearance = NSAppearance(named: appearance)
+                        view.layoutSubtreeIfNeeded()
+                        try? await Task.sleep(for: .milliseconds(150))
+                        if let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                            view.cacheDisplay(in: view.bounds, to: bitmap)
+                            try? bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/ahm-cli-batch-\(name).png"))
+                        }
+                    }
+                    try? Data().write(to: home.appendingPathComponent("capture.batch.done"))
                 }
                 if FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.cli-install").path),
                    !FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.cli-install.done").path),

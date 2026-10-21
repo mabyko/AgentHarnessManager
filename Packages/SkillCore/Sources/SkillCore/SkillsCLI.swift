@@ -32,6 +32,7 @@ public struct SkillsCLIPlan: Identifiable, Sendable {
     public internal(set) var trackedReference: String?
     public internal(set) var updateRepository: SourceRepository?
     public internal(set) var legacyLinkCleanup: [String] = []
+    public internal(set) var removalNames: [String] = []
     var pathStates: [String: String] = [:]
     var expectedContents: [String: String] = [:]
     public var command: String {

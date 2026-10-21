@@ -110,7 +110,12 @@ final class AppStore {
             if let id = groupFilterID, !groups.contains(where: { $0.id == id }) { groupFilterID = nil }
         }
     }
-    var selectedSkillID: String?
+    var selectedSkillID: String? {
+        didSet {
+            if selectedSkillID != oldValue { selectedSkillIDs = selectedSkillID.map { [$0] } ?? [] }
+        }
+    }
+    private(set) var selectedSkillIDs: Set<String> = []
     var selectedGroupID: UUID?
     var selectedFindingID: String?
     var selectedReviewID: UUID?
@@ -453,12 +458,13 @@ final class AppStore {
     }
     func matchesSearch(_ text: String) -> Bool { search.isEmpty || text.localizedCaseInsensitiveContains(search) }
 
-    func rescan() async {
+    func rescan(preservingUpdatesFor unchangedIDs: Set<String> = []) async {
         scanGeneration += 1
         let generation = scanGeneration
         let inputs = registeredRoots
         guard !isMutating, !isPreparingChange, !isCheckingUpdates else { return }
-        updateChecks = [:]; lastUpdatesChecked = nil
+        updateChecks = updateChecks.filter { unchangedIDs.contains($0.key) }
+        if unchangedIDs.isEmpty { lastUpdatesChecked = nil }
         isScanning = true
         await refreshAgentInstallations()
         refreshSkillsCLI()
@@ -475,6 +481,7 @@ final class AppStore {
         guard generation == scanGeneration else { return }
         snapshot = result
         skills = library
+        updateChecks = updateChecks.filter { id, _ in library.contains { $0.id == id } }
         journal = saved
         reconcileGroupSelection()
         currentReview = ReviewRecord(skills: library, roots: problemRoots)
@@ -485,6 +492,7 @@ final class AppStore {
         lastScanned = .now
         hasScanned = true
         isScanning = false
+        selectSkills(selectedSkillIDs)
         await refreshAgentRequests()
     }
 
@@ -580,6 +588,20 @@ enum LibraryFilter: String, CaseIterable, Identifiable {
 
 extension AppStore {
     var allInstallations: [SkillInstallation] { skills.flatMap(\.installations) }
+    var selectedSkills: [CanonicalSkill] { filteredSkills.filter { selectedSkillIDs.contains($0.id) } }
+
+    func selectSkills(_ ids: Set<String>) {
+        let visible = filteredSkills.filter { ids.contains($0.id) }
+        let selection = Set(visible.map(\.id))
+        if selectedSkillID == nil || !selection.contains(selectedSkillID!) { selectedSkillID = visible.first?.id }
+        selectedSkillIDs = selection
+    }
+
+    func prepareSelectedSkillsRemoval() async {
+        guard managementMethod == .skillsCLI else { return }
+        await prepareRemoval(selectedSkills.flatMap(\.installations), allAgents: true)
+    }
+
     var selectedSkill: CanonicalSkill? { skills.first { $0.id == selectedSkillID } }
     var groups: [SkillGroup] { preferences.groups }
     var filteredGroups: [SkillGroup] { groups.filter { matchesSearch($0.name) } }
@@ -917,6 +939,11 @@ extension AppStore {
             skill.installations.contains { plan.expectedPaths.contains($0.originalPath) }
         }?.id : nil
         let service = skillsCLIService
+        let previousOrder = filteredSkills.map(\.id)
+        let previousSelection = selectedSkillID
+        let unchangedIDs = Set(skills.filter { skill in
+            !skill.installations.contains { plan.checkedPaths.contains($0.originalPath) || plan.checkedPaths.contains($0.resolvedPath ?? "") }
+        }.map(\.id))
         var success = false
         do {
             if let repository = plan.updateRepository, let reference = plan.trackedReference, let expected = plan.reviewedCommit {
@@ -937,17 +964,24 @@ extension AppStore {
                 _ = addRoot(url: root.url, agent: root.agent, name: root.label)
             }
         }
-        await rescan()
+        await rescan(preservingUpdatesFor: unchangedIDs)
         if success {
-            page = .library; clearLibraryFilters()
-            selectedSkillID = skills.first { skill in skill.installations.contains { plan.expectedPaths.contains($0.originalPath) } }?.id
-            if let old = priorSkillID, let current = selectedSkillID, old != current, !preferencesLoadFailed {
+            if plan.operation == .install { page = .library; clearLibraryFilters() }
+            let changedID = skills.first { skill in skill.installations.contains { plan.expectedPaths.contains($0.originalPath) } }?.id
+            if plan.operation != .remove { selectSkills(changedID.map { [$0] } ?? []) }
+            else if selectedSkillIDs.isEmpty, let previousSelection {
+                let index = previousOrder.firstIndex(of: previousSelection) ?? 0
+                let next = Array(previousOrder.dropFirst(index)) + Array(previousOrder.prefix(index).reversed())
+                selectedSkillID = next.first { id in filteredSkills.contains { $0.id == id } } ?? filteredSkills.first?.id
+            }
+            if let old = priorSkillID, let current = changedID, old != current, !preferencesLoadFailed {
                 var updated = preferences
                 if updated.favorites.remove(old) != nil { updated.favorites.insert(current) }
                 for index in updated.groups.indices where updated.groups[index].skillIDs.remove(old) != nil {
                     updated.groups[index].skillIDs.insert(current)
                 }
                 _ = savePreferences(updated)
+                selectSkills([current])
             }
         }
     }

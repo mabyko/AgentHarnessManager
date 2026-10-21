@@ -310,4 +310,44 @@ final class SkillsCLITests: XCTestCase {
         XCTAssertTrue(plan.scopeNote.contains("Codex")); XCTAssertTrue(plan.scopeNote.contains("Claude Code"))
         XCTAssertThrowsError(try f.service.prepare(folder: f.source, agents: [], executable: f.executable))
     }
+    func testBatchRemovalReviewsOnlyNamedSkillsAndPreservesUnselectedSkill() throws {
+        let f = try Fixture(); defer { f.remove() }
+        for name in ["one", "two", "keep"] {
+            let folder = f.home.appendingPathComponent(".agents/skills/" + name)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try "---\nname: \(name)\ndescription: Batch fixture\n---\nBody".write(to: folder.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+            if name != "keep" {
+                let link = f.home.appendingPathComponent(".pi/agent/skills/" + name)
+                try FileManager.default.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try FileManager.default.createSymbolicLink(at: link, withDestinationURL: folder)
+            }
+        }
+        try """
+        #!/bin/sh
+        if [ "$1" = "--version" ]; then echo 1.7.4; exit 0; fi
+        printf '%s\\n' "$@" > "$HOME/arguments"
+        shift
+        for name in "$@"; do
+            [ "$name" = "--global" ] && break
+            rm -rf -- "$HOME/.agents/skills/$name"
+        done
+        """.write(to: f.executable, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: f.executable.path)
+        let items = installed(f), selected = items.filter { $0.name != "keep" }
+        let plan = try f.service.prepareRemoval(installations: selected, allInstallations: items, executable: f.executable, allAgents: true)
+        XCTAssertEqual(plan.arguments, ["remove", "one", "two", "--global", "--yes"])
+        XCTAssertEqual(plan.removalNames, ["one", "two"])
+        XCTAssertEqual(plan.legacyLinkCleanup.count, 2)
+        XCTAssertFalse(plan.checkedPaths.contains { $0.hasSuffix("/keep") })
+        XCTAssertThrowsError(try f.service.prepareRemoval(installations: selected, allInstallations: items, executable: f.executable))
+        let changed = f.home.appendingPathComponent(".agents/skills/two/new-resource")
+        try Data([1]).write(to: changed)
+        XCTAssertThrowsError(try f.service.apply(plan))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: f.home.appendingPathComponent("arguments").path))
+        let reviewed = try f.service.prepareRemoval(installations: installed(f).filter { $0.name != "keep" }, allInstallations: installed(f), executable: f.executable, allAgents: true)
+        _ = try f.service.apply(reviewed)
+        XCTAssertEqual(installed(f).map(\.name), ["keep"])
+        for path in reviewed.expectedPaths { XCTAssertEqual(try f.service.pathState(path), "missing") }
+    }
+
 }
