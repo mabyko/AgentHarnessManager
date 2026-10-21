@@ -84,7 +84,7 @@ public struct GitHubSkillService: Sendable {
         let skills = response.tree.filter {
             $0.type == "blob" && ["100644", "100755"].contains($0.mode)
                 && ($0.path == "SKILL.md" || $0.path.hasSuffix("/SKILL.md"))
-        }.map { item in
+        }.map { item -> GitHubSkillCandidate in
             let directory = item.path == "SKILL.md" ? "" : String(item.path.dropLast("/SKILL.md".count))
             let name = directory.isEmpty ? repository.url.lastPathComponent : URL(fileURLWithPath: directory).lastPathComponent
             return GitHubSkillCandidate(path: directory, name: name)
