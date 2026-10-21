@@ -18,7 +18,7 @@ A native macOS library for agent skills, built with SwiftUI. Browse skills and t
 - Browse pending and completed changes, search installation paths, and review an inverse plan before undoing a supported completed operation. Both records are retained. Group selections are reconciled from the journal after restart or recovery.
 - Inspect local document/metadata/path findings and save up to 50 review snapshots, with hashes and a current-state comparison. This is a local check, not AI review.
 - Manage paths and system/light/dark appearance in Settings. Removing a registered path does not remove files.
-- Show detected installed agents in the sidebar; keep all eight integrations and their installation state in Settings. Detection checks executable files and supported app bundles without launching agents or reading credentials. Explicitly registered custom agents remain visible, and missing agents do not remove skill data.
+- Show detected installed agents in the library's agent filter; keep all eight integrations and their installation state in Settings. Detection checks executable files and supported app bundles without launching agents or reading credentials. Explicitly registered custom agents remain visible, and missing agents do not remove skill data.
 - Connect Codex, Claude Code, Grok Build, Antigravity, OpenCode, Pi, Devin CLI, and Cursor through the bundled CLI/stdio MCP server. Agents can inspect skills and local findings, preview enable/disable changes, and queue requests for human review in the app. Connection installation/removal previews the command or MCP entry and backs up existing configuration. Shared compatibility paths remain one installation and show affected agents.
 - Navigate custom sidebar controls with the keyboard. Accessibility labels identify each agent action and path; agent names and connection states are read together.
 - View, edit, and create user-global instruction files for Codex, Claude Code, Grok Build, Antigravity, OpenCode, and Pi. Review before/after text before saving or restoring a private local backup. External edits block stale writes; supported shared file links retain their links. Cursor and Devin CLI are marked unsupported for this file editor only.
@@ -59,18 +59,18 @@ Personal signing settings belong in the ignored `Config/Local.xcconfig`. See [CO
 ## Use it
 
 1. Open Settings (`⌘,`) → **스킬 경로** and choose an agent to inspect its default/shared roots or add a folder for browsing.
-2. Choose a summary filter, agent, or group in the sidebar; select a skill in the middle list to read its locations, groups, provenance, and original document on the right. Refresh with `⌘R` after external changes.
-3. Create a group with “새 그룹”. Use “모든 그룹” to edit membership or request a group switch; select whether other groups should remain enabled.
+2. Open **스킬 라이브러리** and combine the status, agent, and group menus above the list. Expand the path, source, and link filters when needed, or reset all filters. Select a skill to read its locations, groups, provenance, and original document on the right. Refresh with `⌘R` after external changes.
+3. Open the library’s **그룹** section and create a group with “새 그룹”. Edit membership or request a group switch there; select whether other groups should remain enabled.
 4. Request a supported file switch, review every source and destination, then choose Apply. If interrupted, resolve any reported conflict and use “복구 재시도” to finish the recorded operation.
-5. Open “변경 이력” to inspect recorded moves or choose “되돌리기 검토…” and review the inverse plan before applying it.
-6. Refresh and choose “검사” to save a local review snapshot; open its history entry to inspect the saved evidence.
-7. Open **전역 지침**, choose an agent and file, edit the Markdown, then choose **변경 검토…** (`⌘S`) and explicitly save. **백업 복원** also requires a preview. Drafts survive navigation and refresh in the running app; quitting warns before discarding them. See [global instruction files](docs/global-instructions.md) for paths, precedence, backups, and supported links.
+5. Open **활동 이력 → 변경** to inspect recorded moves or choose “되돌리기 검토…” and review the inverse plan before applying it.
+6. Refresh and choose “검사” to save a local review snapshot; open its entry under **활동 이력 → 검사 이력** to inspect the saved evidence.
+7. Open **전역 지침**, choose an agent above the file list, and edit a file's Markdown. For a missing candidate, choose **초안 작성**; nonempty content and **파일 만들기 검토… → 파일 만들기** are required to create it. Existing-file changes use **변경 검토…** (`⌘S`). **백업 복원** and eligible **만들기 되돌리기…** also require a preview; existing files have no arbitrary delete control. Drafts survive navigation and refresh in the running app; quitting warns before discarding them. See [global instruction files](docs/global-instructions.md).
 
 ## Agent CLI / MCP connection
 
 Open Settings (`⌘,`) → **에이전트 연동 · CLI / MCP** → **연결 설치…** for the agent you use. Review the configuration path and exact command or MCP entry, then install. Codex, Claude Code, and Grok Build use their installed CLI's config command. Antigravity, OpenCode, Pi, Devin CLI, and Cursor use reviewed JSON/JSONC configuration edits; their CLI does not need to be installed to save a registration. **등록 상태 확인** checks the saved entry without starting these five agents or their MCP servers. Registration does not prove that an agent is installed or has loaded the tools. Open a new agent session to verify use. The app does not sign in to a model provider or read the agent's credentials; authentication remains with the agent.
 
-Ask the agent to inspect your skills or prepare enable/disable requests. Open **에이전트 요청** in the app, choose **현재 상태로 검토…**, inspect the regenerated plan, and apply it. Requests expire after 24 hours and are rejected if settings, documents, resources, or relevant history changed. Queuing never applies changes. Group definitions/selections are readable; agent-driven group editing or activation is not yet provided.
+Ask the agent to inspect your skills or prepare enable/disable requests. Open **활동 이력 → 요청** in the app, choose **현재 상태로 검토…**, inspect the regenerated plan, and apply it. Requests expire after 24 hours and are rejected if settings, documents, resources, or relevant history changed. Queuing never applies changes. Group definitions/selections are readable; agent-driven group editing or activation is not yet provided.
 
 The CLI is inside the app at `Contents/Helpers/ahm`; copy its path in Settings. See [CLI and MCP usage](docs/agent-integration.md) for commands, configuration scopes, backups, and limits. This exposes the app as an MCP server; it does not implement a general MCP-server manager.
 

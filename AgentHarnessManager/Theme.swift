@@ -28,9 +28,61 @@ extension URL {
 
 extension View {
     func keyboardActivation(_ action: @escaping () -> Void) -> some View {
-        focusable().onKeyPress(keys: [.space, .return]) { _ in
-            action()
-            return .handled
+        modifier(KeyboardActivation(action: action))
+    }
+}
+
+private struct KeyboardActivation: ViewModifier {
+    let action: () -> Void
+    @Environment(\.isEnabled) private var enabled
+    @FocusState private var focused: Bool
+
+    func body(content: Content) -> some View {
+        content.focusable().focused($focused).focusEffectDisabled()
+            .overlay {
+                RoundedRectangle(cornerRadius: 7).strokeBorder(focused && enabled ? WorkbenchTheme.accent : .clear, lineWidth: 2)
+                    .allowsHitTesting(false).accessibilityHidden(true)
+            }
+            .onKeyPress(keys: [.space, .return], phases: .down) { _ in
+                guard enabled else { return .ignored }
+                action()
+                return .handled
+            }
+    }
+}
+
+struct SidebarButtonStyle: ButtonStyle {
+    var selected = false
+    var resting: Color = .clear
+    var outlineSelection = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        Surface(configuration: configuration, selected: selected, resting: resting, outlineSelection: outlineSelection)
+    }
+
+    private struct Surface: View {
+        let configuration: ButtonStyleConfiguration
+        let selected: Bool
+        let resting: Color
+        let outlineSelection: Bool
+        @Environment(\.isEnabled) private var enabled
+        @State private var hovered = false
+
+        var body: some View {
+            configuration.label
+                .contentShape(RoundedRectangle(cornerRadius: 7))
+                .background(selected ? WorkbenchTheme.selection : resting, in: RoundedRectangle(cornerRadius: 7))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(Color.primary.opacity(enabled ? configuration.isPressed ? 0.12 : hovered ? 0.05 : 0 : 0))
+                        .allowsHitTesting(false).accessibilityHidden(true)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 7)
+                        .strokeBorder(selected && outlineSelection ? WorkbenchTheme.accent : .clear, lineWidth: 1)
+                        .allowsHitTesting(false).accessibilityHidden(true)
+                }
+                .onHover { hovered = $0 }
         }
     }
 }

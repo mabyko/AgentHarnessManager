@@ -41,9 +41,8 @@ struct SettingsView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 12).padding(.vertical, 10)
                             .foregroundStyle(WorkbenchTheme.sidebarText)
-                            .background(page == item ? WorkbenchTheme.selection : .clear, in: RoundedRectangle(cornerRadius: 6))
                             .contentShape(Rectangle())
-                    }.buttonStyle(.plain).keyboardActivation { page = item }
+                    }.buttonStyle(SidebarButtonStyle(selected: page == item)).keyboardActivation { page = item }
                     .accessibilityIdentifier("settings.page." + item.rawValue)
                     .accessibilityAddTraits(page == item ? .isSelected : [])
                 }

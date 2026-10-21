@@ -26,7 +26,26 @@ final class InstructionStore {
     var hasChanges: Bool { base.map { text != $0.text } ?? false }
     var hasDrafts: Bool { drafts.contains { id, text in bases[id].map { text != $0.text } ?? false } }
     var externallyChanged: Bool { base?.revision != selectedDocument?.revision }
-    var canSave: Bool { supported && base?.isWritable == true && (hasChanges || base?.data == nil) && !busy && !externallyChanged }
+    var isCreating: Bool { base?.data == nil && selectedID.flatMap { drafts[$0] } != nil }
+    var canSave: Bool {
+        supported && base?.isWritable == true && hasChanges && !busy && !externallyChanged && preview == nil
+            && (base?.data != nil || (isCreating && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+    }
+    var creationUndo: InstructionBackup? {
+        guard let document = selectedDocument, document.data != nil, document.isWritable, !document.isLink,
+              !hasChanges, !externallyChanged, !busy else { return nil }
+        return backups.first { $0.wasCreation && $0.documentURL == document.url && $0.savedDigest == document.digest }
+    }
+
+    func beginCreation() {
+        guard base?.data == nil, base?.isWritable == true, !isCreating, !busy else { return }
+        edit("")
+    }
+
+    func hasDraft(for document: InstructionDocument) -> Bool {
+        guard let draft = drafts[document.id], let base = bases[document.id] else { return false }
+        return draft != base.text
+    }
 
     func edit(_ text: String) {
         guard let id = selectedID, let document = selectedDocument else { return }
@@ -49,7 +68,8 @@ final class InstructionStore {
         do {
             let updated = try await Task.detached { try service.scan() }.value
             for document in updated {
-                if let draft = drafts[document.id], let base = bases[document.id], draft != base.text { continue }
+                if let draft = drafts[document.id], let base = bases[document.id],
+                   draft != base.text || (base.data == nil && document.data == nil) { continue }
                 drafts.removeValue(forKey: document.id)
                 bases.removeValue(forKey: document.id)
             }
@@ -105,13 +125,16 @@ final class InstructionStore {
             busy = false
             await refresh()
             await loadBackups()
-            message = plan.restoring ? "백업을 복원했습니다. 새 에이전트 세션에서 지침을 확인하세요." : "지침을 저장했습니다. 새 에이전트 세션에서 지침을 확인하세요."
+            message = plan.restoring && plan.replacementData == nil ? "새 파일 만들기를 되돌렸습니다."
+                : plan.restoring ? "백업을 복원했습니다. 새 에이전트 세션에서 지침을 확인하세요."
+                : "지침을 저장했습니다. 새 에이전트 세션에서 지침을 확인하세요."
             return true
         } catch { busy = false; message = error.localizedDescription; return false }
     }
 
     private func selectDefault() {
-        selectedID = agentDocuments.first(where: { $0.data != nil })?.id
+        selectedID = agentDocuments.first(where: { drafts[$0.id] != nil })?.id
+            ?? agentDocuments.first(where: { $0.data != nil })?.id
             ?? agentDocuments.first(where: { $0.url.lastPathComponent == "AGENTS.md" })?.id
             ?? agentDocuments.first?.id
         backups = []

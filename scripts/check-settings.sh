@@ -41,6 +41,7 @@ import uuid
 import os
 import signal
 import shlex
+import pathlib
 suite = "ahm.settings.check." + uuid.uuid4().hex
 process = None
 try:
@@ -68,4 +69,6 @@ finally:
         except ProcessLookupError:
             pass
     subprocess.run(["/usr/bin/defaults", "delete", suite], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # Remove the fixture's own registration before the shell removes its bundle.
+    subprocess.run(["/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", "-u", str(pathlib.Path(sys.argv[1]).parents[2])], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 PY
