@@ -42,4 +42,27 @@ final class GitHubSkillTests: XCTestCase {
             catch { XCTAssertTrue(error.localizedDescription.contains("공개 GitHub")) }
         }
     }
+    func testContentComparisonIgnoresFinderMetadataButKeepsHiddenResources() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("FinderMetadata-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("resources"), withIntermediateDirectories: true)
+        let body = Data("Skill body".utf8), config = Data("hidden resource".utf8)
+        try body.write(to: folder.appendingPathComponent("SKILL.md"))
+        try config.write(to: folder.appendingPathComponent("resources/.config"))
+        let listing = try GitHubSkillService.parse(tree([item("demo/SKILL.md", data: body), item("demo/resources/.config", data: config)]), repository: repository)
+        let skill = listing.skills[0]
+        try Data([1]).write(to: folder.appendingPathComponent(".DS_Store"))
+        try Data([2]).write(to: folder.appendingPathComponent("resources/.DS_Store"))
+        XCTAssertTrue(try GitHubSkillService.contentMatches(folder: folder, skill: skill, listing: listing))
+        let remoteMetadata = try GitHubSkillService.parse(tree([item("demo/SKILL.md", data: body), item("demo/resources/.config", data: config), item("demo/.DS_Store", data: Data([3]))]), repository: repository)
+        XCTAssertTrue(try GitHubSkillService.contentMatches(folder: folder, skill: skill, listing: remoteMetadata))
+        let unsafeMetadata = try GitHubSkillService.parse(tree([item("demo/SKILL.md", data: body), item("demo/.DS_Store", mode: "120000")]), repository: repository)
+        XCTAssertThrowsError(try GitHubSkillService.contentMatches(folder: folder, skill: skill, listing: unsafeMetadata))
+        try Data([4]).write(to: folder.appendingPathComponent(".local-settings"))
+        XCTAssertFalse(try GitHubSkillService.contentMatches(folder: folder, skill: skill, listing: listing))
+        try FileManager.default.removeItem(at: folder.appendingPathComponent(".DS_Store"))
+        try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent(".DS_Store"), withDestinationURL: folder.appendingPathComponent("SKILL.md"))
+        XCTAssertThrowsError(try GitHubSkillService.contentHashes(folder: folder))
+    }
+
 }

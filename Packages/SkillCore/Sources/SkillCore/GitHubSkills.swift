@@ -100,7 +100,8 @@ public struct GitHubSkillService: Sendable {
         guard remote.allSatisfy({ $0.type == "blob" && ["100644", "100755"].contains($0.mode) }), remote.count <= 10_000 else {
             throw failure("원격 스킬에 지원하지 않는 링크·항목이 있습니다.")
         }
-        let expected = Dictionary(uniqueKeysWithValues: remote.map { (String($0.path.dropFirst(prefix.count)), $0.sha) })
+        let contents = remote.filter { $0.path.split(separator: "/").last != ".DS_Store" }
+        let expected = Dictionary(uniqueKeysWithValues: contents.map { (String($0.path.dropFirst(prefix.count)), $0.sha) })
         return try contentHashes(folder: folder) == expected
     }
 
@@ -118,6 +119,7 @@ public struct GitHubSkillService: Sendable {
             if info.isDirectory == true { continue }
             guard info.isRegularFile == true, let size = info.fileSize, size <= 64 * 1_024 * 1_024 - bytes else { throw failure("설치 파일의 형식·크기를 확인하세요.") }
             bytes += size
+            if file.lastPathComponent == ".DS_Store" { continue }
             let data = try Data(contentsOf: file)
             guard data.count == size else { throw failure("비교 중 설치 파일이 바뀌었습니다.") }
             var framed = Data("blob \(data.count)\0".utf8); framed.append(data)

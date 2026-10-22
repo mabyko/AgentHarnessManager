@@ -145,18 +145,22 @@ final class InstructionStore {
 final class InstructionAppDelegate: NSObject, NSApplicationDelegate {
     weak var instructions: InstructionStore?
     weak var store: AppStore?
-    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if store?.isMutating == true || store?.isPreparingChange == true {
-            store?.libraryMessage = "파일 변경을 마친 뒤 종료할 수 있습니다."
-            return .terminateCancel
-        }
-        store?.cancelSkillsCLIChange()
-        guard instructions?.hasDrafts == true else { return .terminateNow }
+    var confirmDiscardDrafts: () -> Bool = {
         let alert = NSAlert()
         alert.messageText = "저장하지 않은 지침 초안이 있습니다"
         alert.informativeText = "취소하면 초안을 계속 편집하고 변경을 검토할 수 있습니다. 종료하면 저장하지 않은 초안은 사라집니다."
         alert.addButton(withTitle: "종료 취소")
         alert.addButton(withTitle: "저장하지 않고 종료")
-        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
+        return alert.runModal() == .alertSecondButtonReturn
+    }
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if store?.isMutating == true || store?.isPreparingChange == true {
+            store?.libraryMessage = "파일 변경을 마친 뒤 종료할 수 있습니다."
+            return .terminateCancel
+        }
+        if instructions?.hasDrafts == true && !confirmDiscardDrafts() { return .terminateCancel }
+        store?.cancelSkillsCLIChange()
+        store?.cancelPreview()
+        return .terminateNow
     }
 }

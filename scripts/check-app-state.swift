@@ -780,8 +780,10 @@ struct AppStateCheck {
         guard let cancelled = await store.prepareInstallation(source: source, root: root) else { check(false, "Must prepare local installation"); return }
         check(store.mutationPreview == nil && store.skills.isEmpty, "Preparation must wait for the installer sheet to dismiss")
         store.mutationPreview = cancelled
-        store.cancelPreview()
-        check(!files.fileExists(atPath: cancelled.installations[0].source), "Cancelling installation must discard staging")
+        let delegate = InstructionAppDelegate()
+        delegate.store = store; delegate.instructions = store.instructions
+        check(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateNow, "A quit without drafts must be accepted")
+        check(store.mutationPreview == nil && !files.fileExists(atPath: cancelled.installations[0].source), "Accepted quit must discard direct-install staging")
         guard let plan = await store.prepareInstallation(source: source, root: root, repository: SourceRepository("example/skills")) else { check(false); return }
         store.search = "does not match"
         store.mutationPreview = plan
@@ -838,7 +840,12 @@ struct AppStateCheck {
         exit 0
         """.write(to: executable, atomically: true, encoding: .utf8)
         try files.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
-        let service = SkillsCLIService(home: home, environment: [:], detector: AgentInstallationDetector(executableDirectories: [bin, URL(fileURLWithPath: "/bin"), URL(fileURLWithPath: "/usr/bin")], applicationDirectories: []))
+        let override = home.appendingPathComponent("override-config")
+        for path in ["claude/skills", "grok/skills", "xdg/devin/skills"] {
+            try files.createDirectory(at: override.appendingPathComponent(path), withIntermediateDirectories: true)
+        }
+        let service = SkillsCLIService(home: home, environment: ["CLAUDE_CONFIG_DIR": override.appendingPathComponent("claude").path,
+            "GROK_HOME": override.appendingPathComponent("grok").path, "XDG_CONFIG_HOME": override.appendingPathComponent("xdg").path], detector: AgentInstallationDetector(executableDirectories: [bin, URL(fileURLWithPath: "/bin"), URL(fileURLWithPath: "/usr/bin")], applicationDirectories: []))
         let store = AppStore(defaults: defaults, home: home, skillsCLIService: service, gitHubSkills: SkillUpdateFixture.service())
         await store.rescan(); store.setManagementMethod(.skillsCLI)
         let untouched = store.skills.first { $0.name == "keyboard-demo" }!
@@ -858,7 +865,9 @@ struct AppStateCheck {
         check(store.skillsCLIPreview?.arguments == ["remove", "cli-example", "zulu-demo", "--global", "--yes"])
         store.cancelSkillsCLIChange()
         check(store.skills.count == 3 && store.selectedSkills.count == 2, "Cancel must preserve files, selection and filters")
+        let rootsBeforeRemoval = Set(store.registeredRoots.map { $0.url.path })
         await store.prepareSelectedSkillsRemoval(); await store.applySkillsCLIChange()
+        check(Set(store.registeredRoots.map { $0.url.path }) == rootsBeforeRemoval, "CLI removal must not register environment-override roots")
         check(!store.skillsCLIFailed && store.skills.map(\.name) == ["keyboard-demo"], store.libraryMessage ?? "Batch delete failed")
         check(store.sourceFilterID == SourceRepository("fixture/cli")!.id && store.search == "fixture" && store.libraryFilter == .on
               && store.agentFilter == .codex && store.rootFilterID != nil && store.groupFilterID == store.groups[0].id,
@@ -966,8 +975,20 @@ struct AppStateCheck {
         await store.prepareSkillUpdate(store.skills[0])
         check(store.skillsCLIPreview?.operation == .update && store.skillsCLIPreview?.arguments.first == "add")
         let staged = store.skillsCLIPreview!.sourceFolder!
-        store.cancelSkillsCLIChange()
-        check(!files.fileExists(atPath: staged.path), "Cancelling update must clean the downloaded review")
+        await store.instructions.refresh()
+        store.instructions.edit("Unsaved quit-regression draft")
+        check(store.instructions.hasDrafts, "Quit regression must have a real instruction draft")
+        let delegate = InstructionAppDelegate()
+        delegate.store = store; delegate.instructions = store.instructions
+        delegate.confirmDiscardDrafts = { false }
+        let reviewID = store.skillsCLIPreview!.id
+        check(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateCancel, "Draft quit cancellation must be respected")
+        check(store.skillsCLIPreview?.id == reviewID && files.fileExists(atPath: staged.path) && store.instructions.hasDrafts,
+              "Cancelled quit must preserve CLI review, staged GitHub files and instruction drafts")
+        delegate.confirmDiscardDrafts = { true }
+        check(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateNow, "Confirmed quit must be accepted")
+        check(store.skillsCLIPreview == nil && !files.fileExists(atPath: staged.path), "Confirmed quit must clean the downloaded review")
+        store.instructions.discardDraft()
         check(try Data(contentsOf: installedDocument) == originalDocument, "Cancelling update must preserve local edits")
         await store.prepareSkillUpdate(store.skills[0])
         await store.applySkillsCLIChange()

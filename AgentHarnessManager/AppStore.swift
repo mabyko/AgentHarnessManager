@@ -960,7 +960,7 @@ extension AppStore {
         isMutating = false
         if success {
             cancelSkillsCLIChange()
-            for root in plan.roots where !registeredRoots.contains(where: { $0.url.path == root.url.path }) && FileManager.default.fileExists(atPath: root.url.path) {
+            for root in plan.roots where plan.operation == .install && !registeredRoots.contains(where: { $0.url.path == root.url.path }) && FileManager.default.fileExists(atPath: root.url.path) {
                 _ = addRoot(url: root.url, agent: root.agent, name: root.label)
             }
         }
