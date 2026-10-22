@@ -78,6 +78,22 @@ struct SourceGroup: Identifiable {
     var id: String { repository.id }
 }
 
+struct SkillUpdateCheck {
+    enum Status { case available, current, modified, unavailable, failed }
+    let status: Status
+    let message: String
+    let checkedAt = Date()
+    var source: SkillUpdateSource?
+    var listing: GitHubSkillListing?
+    var candidate: GitHubSkillCandidate?
+    var title: String {
+        switch status { case .available: "업데이트 있음"; case .current: "최신 상태"; case .modified: "로컬 내용 다름"; case .unavailable: "자동 확인 불가"; case .failed: "확인 실패" }
+    }
+    var symbol: String {
+        switch status { case .available: "arrow.down.circle"; case .current: "checkmark.circle"; case .modified: "pencil.circle"; case .unavailable: "info.circle"; case .failed: "exclamationmark.triangle" }
+    }
+}
+
 @MainActor @Observable
 final class AppStore {
     let instructions: InstructionStore
@@ -94,12 +110,32 @@ final class AppStore {
             if let id = groupFilterID, !groups.contains(where: { $0.id == id }) { groupFilterID = nil }
         }
     }
-    var selectedSkillID: String?
+    var selectedSkillID: String? {
+        didSet {
+            if selectedSkillID != oldValue { selectedSkillIDs = selectedSkillID.map { [$0] } ?? [] }
+        }
+    }
+    private(set) var selectedSkillIDs: Set<String> = []
     var selectedGroupID: UUID?
     var selectedFindingID: String?
     var selectedReviewID: UUID?
     var selectedMutationID: UUID?
     var mutationPreview: MutationPlan?
+    var skillsCLIPreview: SkillsCLIPlan?
+    private(set) var managementMethod: SkillManagementMethod
+    private(set) var skillsCLIExecutable: URL?
+    private(set) var skillsCLIOutput: String?
+    private(set) var skillsCLIFailed = false
+    private(set) var updateChecks: [String: SkillUpdateCheck] = [:]
+    private(set) var isCheckingUpdates = false
+    private(set) var updatesProgress = ""
+    private(set) var lastUpdatesChecked: Date?
+    @ObservationIgnored private let skillsCLIService: SkillsCLIService
+    @ObservationIgnored private let gitHubSkills: GitHubSkillService
+    @ObservationIgnored private var skillsCLIDownload: GitHubSkillDownload?
+    // Keep the existing choice when expanding installation to lifecycle management.
+    private static let managementMethodKey = "skillInstallMethod"
+    private static let skillsCLIPathKey = "skillsCLIExecutable"
     var libraryMessage: String?
     private(set) var preferences = AppPreferences()
     private(set) var preferencesLoadFailed = false
@@ -169,9 +205,16 @@ final class AppStore {
 
     init(defaults: UserDefaults = .standard, home: URL = FileManager.default.homeDirectoryForCurrentUser,
          installationDetector: AgentInstallationDetector? = nil,
+         skillsCLIService: SkillsCLIService? = nil,
+         gitHubSkills: GitHubSkillService = GitHubSkillService(),
          instructionEnvironment: [String: String] = ProcessInfo.processInfo.environment) {
         self.defaults = defaults
         self.home = home
+        self.skillsCLIService = skillsCLIService ?? SkillsCLIService(home: home)
+        self.gitHubSkills = gitHubSkills
+        managementMethod = defaults.string(forKey: Self.managementMethodKey).flatMap(SkillManagementMethod.init(rawValue:)) ?? .direct
+        let preferredCLI = defaults.string(forKey: Self.skillsCLIPathKey).map { URL(fileURLWithPath: $0) }
+        skillsCLIExecutable = self.skillsCLIService.detect(preferred: preferredCLI)
         instructions = InstructionStore(service: GlobalInstructionService(home: home, environment: instructionEnvironment,
             backupDirectory: home.resolvingSymlinksInPath().appendingPathComponent("Library/Application Support/"
                 + (Bundle.main.bundleIdentifier ?? "AgentHarnessManager") + "/InstructionBackups")))
@@ -415,13 +458,16 @@ final class AppStore {
     }
     func matchesSearch(_ text: String) -> Bool { search.isEmpty || text.localizedCaseInsensitiveContains(search) }
 
-    func rescan() async {
+    func rescan(preservingUpdatesFor unchangedIDs: Set<String> = []) async {
         scanGeneration += 1
         let generation = scanGeneration
         let inputs = registeredRoots
-        guard !isMutating, !isPreparingChange else { return }
+        guard !isMutating, !isPreparingChange, !isCheckingUpdates else { return }
+        updateChecks = updateChecks.filter { unchangedIDs.contains($0.key) }
+        if unchangedIDs.isEmpty { lastUpdatesChecked = nil }
         isScanning = true
         await refreshAgentInstallations()
+        refreshSkillsCLI()
         let home = home
         let managed = automaticRoots
         let saved: LibraryJournal
@@ -435,6 +481,7 @@ final class AppStore {
         guard generation == scanGeneration else { return }
         snapshot = result
         skills = library
+        updateChecks = updateChecks.filter { id, _ in library.contains { $0.id == id } }
         journal = saved
         reconcileGroupSelection()
         currentReview = ReviewRecord(skills: library, roots: problemRoots)
@@ -445,6 +492,7 @@ final class AppStore {
         lastScanned = .now
         hasScanned = true
         isScanning = false
+        selectSkills(selectedSkillIDs)
         await refreshAgentRequests()
     }
 
@@ -512,11 +560,12 @@ final class AppStore {
 }
 
 enum LibraryFilter: String, CaseIterable, Identifiable {
-    case all, findings, on, off, favorites, variants
+    case all, updates, findings, on, off, favorites, variants
     var id: String { rawValue }
     var title: String {
         switch self {
         case .all: "전체"
+        case .updates: "업데이트 있음"
         case .findings: "검사 결과"
         case .on: "켜짐"
         case .off: "꺼짐"
@@ -527,6 +576,7 @@ enum LibraryFilter: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .all: "square.stack.3d.up"
+        case .updates: "arrow.down.circle"
         case .findings: "exclamationmark.triangle"
         case .on: "checkmark.circle"
         case .off: "minus.circle"
@@ -538,6 +588,20 @@ enum LibraryFilter: String, CaseIterable, Identifiable {
 
 extension AppStore {
     var allInstallations: [SkillInstallation] { skills.flatMap(\.installations) }
+    var selectedSkills: [CanonicalSkill] { filteredSkills.filter { selectedSkillIDs.contains($0.id) } }
+
+    func selectSkills(_ ids: Set<String>) {
+        let visible = filteredSkills.filter { ids.contains($0.id) }
+        let selection = Set(visible.map(\.id))
+        if selectedSkillID == nil || !selection.contains(selectedSkillID!) { selectedSkillID = visible.first?.id }
+        selectedSkillIDs = selection
+    }
+
+    func prepareSelectedSkillsRemoval() async {
+        guard managementMethod == .skillsCLI else { return }
+        await prepareRemoval(selectedSkills.flatMap(\.installations), allAgents: true)
+    }
+
     var selectedSkill: CanonicalSkill? { skills.first { $0.id == selectedSkillID } }
     var groups: [SkillGroup] { preferences.groups }
     var filteredGroups: [SkillGroup] { groups.filter { matchesSearch($0.name) } }
@@ -547,9 +611,9 @@ extension AppStore {
     var filteredFindings: [ReviewFinding] { currentFindings.filter { matchesSearch("\($0.title) \($0.evidence) \($0.path)") } }
     var filteredReviews: [ReviewRecord] { reviews.filter { matchesSearch("\($0.provider) \($0.date.formatted())") } }
     var selectedReview: ReviewRecord? { reviews.first { $0.id == selectedReviewID } }
-    var metadataIsEditable: Bool { hasScanned && !isScanning && !isMutating && !isPreparingChange && !preferencesLoadFailed && !journalLoadFailed && !groupSyncFailed && journal.pending == nil && mutationPreview == nil }
-    var canChangeFiles: Bool { hasScanned && !isScanning && !isMutating && !isPreparingChange && !journalLoadFailed && !groupSyncFailed && journal.pending == nil }
-    var canEditRoots: Bool { !isScanning && !isMutating && !isPreparingChange && !journalLoadFailed && !groupSyncFailed && journal.pending == nil && mutationPreview == nil }
+    var metadataIsEditable: Bool { hasScanned && !isScanning && !isMutating && !isPreparingChange && !isCheckingUpdates && !preferencesLoadFailed && !journalLoadFailed && !groupSyncFailed && journal.pending == nil && mutationPreview == nil && skillsCLIPreview == nil }
+    var canChangeFiles: Bool { hasScanned && !isScanning && !isMutating && !isPreparingChange && !isCheckingUpdates && !journalLoadFailed && !groupSyncFailed && journal.pending == nil && skillsCLIPreview == nil }
+    var canEditRoots: Bool { !isScanning && !isMutating && !isPreparingChange && !isCheckingUpdates && !journalLoadFailed && !groupSyncFailed && journal.pending == nil && mutationPreview == nil && skillsCLIPreview == nil }
     var mutations: [MutationPlan] { (journal.pending.map { [$0] } ?? []) + journal.completed }
     var filteredMutations: [MutationPlan] {
         mutations.filter { plan in
@@ -580,6 +644,7 @@ extension AppStore {
     func matchesFilter(_ skill: CanonicalSkill, _ filter: LibraryFilter) -> Bool {
         switch filter {
         case .all: true
+        case .updates: updateChecks[skill.id]?.status == .available
         case .findings: skill.hasProblems
         case .on: skill.isEnabled
         case .off: skill.installations.contains { !$0.isEnabled }
@@ -756,16 +821,278 @@ extension AppStore {
             }
         }
         isMutating = true
+        var applied = false
         do {
             try await libraryService.apply(plan, roots: registeredRoots)
+            applied = true
             selectedMutationID = plan.id
             libraryMessage = plan.undoes == nil ? "변경을 완료했습니다. 변경 이력에서 확인할 수 있습니다." : "되돌리기를 완료했습니다. 원래 작업과 실행 기록을 함께 보존했습니다."
             mutationPreview = nil
-        } catch { libraryMessage = error.localizedDescription; mutationPreview = nil }
+        } catch {
+            libraryMessage = error.localizedDescription
+            if let latest = try? await libraryService.load(roots: registeredRoots), latest.pending == nil {
+                LibraryService.discardInstallation(plan)
+            }
+            mutationPreview = nil
+        }
         isMutating = false
         await rescan()
+        if applied, let id = selectedSkillID, !skills.contains(where: { $0.id == id }) { selectedSkillID = nil }
+        if applied, plan.undoes == nil, let installed = plan.installations.first(where: { $0.operation == .install }) {
+            page = .library
+            clearLibraryFilters()
+            selectedSkillID = skills.first { $0.installations.contains { $0.originalPath == installed.destination } }?.id
+            if let repository = installed.sourceRepository,
+               let entry = selectedSkill?.installations.first(where: { $0.originalPath == installed.destination })?.entry {
+                _ = saveSource(for: entry, input: repository)
+            }
+        }
     }
-    func cancelPreview() { mutationPreview = nil }
+    func cancelPreview() {
+        guard let plan = mutationPreview else { return }
+        mutationPreview = nil
+        LibraryService.discardInstallation(plan)
+    }
+
+    func prepareInstallation(source: URL, root: DiscoveryRoot, repository: SourceRepository? = nil) async -> MutationPlan? {
+        guard managementMethod == .direct, canChangeFiles, mutationPreview == nil else { return nil }
+        isPreparingChange = true
+        defer { isPreparingChange = false }
+        let managed = automaticRoots
+        do {
+            let plan = try await Task.detached(priority: .userInitiated) {
+                let prepared = try LibraryService.planInstallation(source: source, root: root, managedRoots: managed)
+                return MutationPlan(title: prepared.title, installations: prepared.installations.map {
+                    var move = $0; move.sourceRepository = repository?.id; return move
+                })
+            }.value
+            libraryMessage = nil
+            return plan
+        } catch { libraryMessage = error.localizedDescription; return nil }
+    }
+
+    func refreshSkillsCLI() {
+        let preferred = defaults.string(forKey: Self.skillsCLIPathKey).map { URL(fileURLWithPath: $0) }
+        skillsCLIExecutable = skillsCLIService.detect(preferred: preferred)
+    }
+
+    func setManagementMethod(_ method: SkillManagementMethod) {
+        guard canEditRoots, method == .direct || skillsCLIExecutable != nil else { return }
+        managementMethod = method
+        updateChecks = [:]; lastUpdatesChecked = nil
+        if libraryFilter == .updates { libraryFilter = .all }
+        defaults.set(method.rawValue, forKey: Self.managementMethodKey)
+    }
+
+    func chooseSkillsCLIExecutable() {
+        guard canEditRoots else { return }
+        let panel = NSOpenPanel()
+        panel.title = "skills CLI 실행 파일 선택"
+        panel.message = "bunx, npx 또는 skills 실행 파일을 선택하세요. 감지만으로 실행하거나 다운로드하지 않습니다."
+        panel.canChooseFiles = true; panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard skillsCLIService.detect(preferred: url) != nil else { settingsMessage = "실행 가능한 일반 파일을 선택하세요."; return }
+        defaults.set(url.path, forKey: Self.skillsCLIPathKey)
+        refreshSkillsCLI()
+    }
+
+    func prepareSkillsCLIInstallation(source: URL, agent: SkillAgent, remoteSource: URL?) async -> SkillsCLIPlan? {
+        await prepareSkillsCLIInstallation(source: source, agents: [agent], remoteSource: remoteSource)
+    }
+
+    func prepareSkillsCLIInstallation(source: URL, agents: [SkillAgent], remoteSource: URL?) async -> SkillsCLIPlan? {
+        guard managementMethod == .skillsCLI, canChangeFiles, mutationPreview == nil, let executable = skillsCLIExecutable else {
+            libraryMessage = "설정에서 skills CLI 실행 파일과 설치 방식을 확인하세요."; return nil
+        }
+        isPreparingChange = true
+        defer { isPreparingChange = false }
+        let service = skillsCLIService
+        do {
+            let plan = try await Task.detached(priority: .userInitiated) {
+                try service.prepare(folder: source, agents: agents, executable: executable, remoteSource: remoteSource)
+            }.value
+            libraryMessage = nil
+            return plan
+        } catch { libraryMessage = error.localizedDescription; return nil }
+    }
+
+    func presentSkillsCLIInstall(_ plan: SkillsCLIPlan, download: GitHubSkillDownload?) {
+        guard managementMethod == .skillsCLI, canChangeFiles, mutationPreview == nil else { download?.discard(); return }
+        skillsCLIDownload = download
+        skillsCLIOutput = nil; skillsCLIFailed = false
+        skillsCLIPreview = plan
+    }
+
+    func cancelSkillsCLIChange() {
+        guard !isMutating else { return }
+        skillsCLIPreview = nil
+        skillsCLIDownload?.discard(); skillsCLIDownload = nil
+    }
+
+    func applySkillsCLIChange() async {
+        guard let plan = skillsCLIPreview, !isMutating, !isScanning, !isPreparingChange,
+              !journalLoadFailed, !groupSyncFailed, journal.pending == nil, mutationPreview == nil,
+              !skillsCLIFailed else { return }
+        isMutating = true
+        let priorSkillID = plan.operation == .update ? skills.first { skill in
+            skill.installations.contains { plan.expectedPaths.contains($0.originalPath) }
+        }?.id : nil
+        let service = skillsCLIService
+        let previousOrder = filteredSkills.map(\.id)
+        let previousSelection = selectedSkillID
+        let unchangedIDs = Set(skills.filter { skill in
+            !skill.installations.contains { plan.checkedPaths.contains($0.originalPath) || plan.checkedPaths.contains($0.resolvedPath ?? "") }
+        }.map(\.id))
+        var success = false
+        do {
+            if let repository = plan.updateRepository, let reference = plan.trackedReference, let expected = plan.reviewedCommit {
+                let latest = try await gitHubSkills.list(repository: repository.url.absoluteString, reference: reference)
+                guard latest.reference == expected else { throw CatalogReadError.inaccessible("검토 후 원격 버전이 바뀌었습니다. 파일을 변경하지 않았습니다. 닫은 뒤 업데이트를 다시 확인하세요.") }
+            }
+            skillsCLIOutput = try await Task.detached(priority: .userInitiated) { try service.apply(plan) }.value
+            libraryMessage = "skills CLI " + plan.operation.title + "를 완료했습니다. CLI가 설치 파일과 설치 기록을 관리합니다."
+            success = true
+        } catch {
+            skillsCLIFailed = true
+            libraryMessage = error.localizedDescription
+        }
+        isMutating = false
+        if success {
+            cancelSkillsCLIChange()
+            for root in plan.roots where plan.operation == .install && !registeredRoots.contains(where: { $0.url.path == root.url.path }) && FileManager.default.fileExists(atPath: root.url.path) {
+                _ = addRoot(url: root.url, agent: root.agent, name: root.label)
+            }
+        }
+        await rescan(preservingUpdatesFor: unchangedIDs)
+        if success {
+            if plan.operation == .install { page = .library; clearLibraryFilters() }
+            let changedID = skills.first { skill in skill.installations.contains { plan.expectedPaths.contains($0.originalPath) } }?.id
+            if plan.operation != .remove { selectSkills(changedID.map { [$0] } ?? []) }
+            else if selectedSkillIDs.isEmpty, let previousSelection {
+                let index = previousOrder.firstIndex(of: previousSelection) ?? 0
+                let next = Array(previousOrder.dropFirst(index)) + Array(previousOrder.prefix(index).reversed())
+                selectedSkillID = next.first { id in filteredSkills.contains { $0.id == id } } ?? filteredSkills.first?.id
+            }
+            if let old = priorSkillID, let current = changedID, old != current, !preferencesLoadFailed {
+                var updated = preferences
+                if updated.favorites.remove(old) != nil { updated.favorites.insert(current) }
+                for index in updated.groups.indices where updated.groups[index].skillIDs.remove(old) != nil {
+                    updated.groups[index].skillIDs.insert(current)
+                }
+                _ = savePreferences(updated)
+                selectSkills([current])
+            }
+        }
+    }
+
+    func prepareRemoval(_ installations: [SkillInstallation], allAgents: Bool = false) async {
+        guard canChangeFiles, mutationPreview == nil else { return }
+        isPreparingChange = true
+        defer { isPreparingChange = false }
+        let all = allInstallations, managed = automaticRoots, roots = registeredRoots
+        do {
+            if managementMethod == .skillsCLI {
+                guard let executable = skillsCLIExecutable else { throw CatalogReadError.inaccessible("skills CLI를 찾을 수 없습니다. 설정에서 실행 파일을 확인하세요. 다른 삭제 방식으로 자동 전환하지 않습니다.") }
+                let service = skillsCLIService
+                let plan = try await Task.detached(priority: .userInitiated) {
+                    try service.prepareRemoval(installations: installations, allInstallations: all, executable: executable, allAgents: allAgents)
+                }.value
+                skillsCLIFailed = false; skillsCLIOutput = nil; skillsCLIPreview = plan
+                libraryMessage = nil
+                return
+            }
+            mutationPreview = try await Task.detached(priority: .userInitiated) {
+                try LibraryService.planRemoval(installations: installations, allInstallations: all,
+                    managedRoots: managed, protectedRoots: roots)
+            }.value
+            libraryMessage = nil
+        } catch { libraryMessage = error.localizedDescription }
+    }
+
+    var canCheckUpdates: Bool { managementMethod == .skillsCLI && canChangeFiles && mutationPreview == nil }
+    var availableUpdateCount: Int { skills.filter { updateChecks[$0.id]?.status == .available }.count }
+
+    func checkSkillUpdates(_ selected: [CanonicalSkill]? = nil) async {
+        guard canCheckUpdates else { return }
+        let targets = selected ?? skills
+        isCheckingUpdates = true
+        defer { isCheckingUpdates = false; updatesProgress = "" }
+        let service = skillsCLIService
+        let github = gitHubSkills
+        var listings: [String: GitHubSkillListing] = [:], failures: [String: String] = [:]
+        for (index, skill) in targets.enumerated() {
+            if Task.isCancelled { break }
+            updatesProgress = "\(index + 1)/\(targets.count) · " + skill.name
+            let source: SkillUpdateSource
+            do {
+                source = try await Task.detached(priority: .userInitiated) {
+                    try service.updateSource(for: skill.installations)
+                }.value
+            } catch {
+                updateChecks[skill.id] = SkillUpdateCheck(status: .unavailable, message: error.localizedDescription)
+                continue
+            }
+            do {
+                let key = source.repository.id + "|" + (source.reference ?? "HEAD")
+                if let failure = failures[key] { throw CatalogReadError.inaccessible(failure) }
+                let listing: GitHubSkillListing
+                if let cached = listings[key] { listing = cached }
+                else {
+                    do {
+                        listing = try await github.list(repository: source.repository.url.absoluteString, reference: source.reference)
+                        listings[key] = listing
+                    } catch { failures[key] = error.localizedDescription; throw error }
+                }
+                let directory = source.skillPath == "SKILL.md" ? "" : String(source.skillPath.dropLast("/SKILL.md".count))
+                guard let candidate = listing.skills.first(where: { $0.path == directory }) else {
+                    throw CatalogReadError.inaccessible("원격 스킬 경로가 이동·삭제됐습니다. 기존 설치는 유지합니다. 출처를 확인하세요.")
+                }
+                let folders = Set(skill.installations.map { $0.resolvedPath ?? $0.originalPath })
+                let matches = try await Task.detached(priority: .userInitiated) {
+                    try folders.allSatisfy { try GitHubSkillService.contentMatches(folder: URL(fileURLWithPath: $0), skill: candidate, listing: listing) }
+                }.value
+                let ref = source.pinnedCommit ? "고정된 커밋을 최신 기본 브랜치와 비교했습니다." : "설치 기록의 기준(" + (source.reference ?? "기본 브랜치") + ")과 비교했습니다."
+                let sameRemoteVersion = source.installedFolderHash != nil && source.installedFolderHash == listing.folderHash(for: candidate)
+                updateChecks[skill.id] = SkillUpdateCheck(status: matches ? .current : sameRemoteVersion ? .modified : .available,
+                    message: ref + (matches ? " 포함 파일 내용이 같습니다." : sameRemoteVersion
+                        ? " 원격은 설치 기록과 같지만 로컬 파일 내용이 다릅니다. 원격 버전으로 복원하면 로컬 수정을 덮어씁니다."
+                        : " 포함 파일이 다릅니다. 업데이트하면 로컬 수정도 덮어씁니다."),
+                    source: source, listing: listing, candidate: candidate)
+            } catch {
+                updateChecks[skill.id] = SkillUpdateCheck(status: .failed, message: error.localizedDescription)
+            }
+        }
+        lastUpdatesChecked = .now
+    }
+
+    func prepareSkillUpdate(_ skill: CanonicalSkill) async {
+        guard managementMethod == .skillsCLI, canChangeFiles, mutationPreview == nil,
+              let executable = skillsCLIExecutable else { libraryMessage = "설정에서 skills CLI 관리 도구와 실행 파일을 확인하세요."; return }
+        guard let check = updateChecks[skill.id], check.status == .available || check.status == .modified,
+              let source = check.source, let listing = check.listing, let candidate = check.candidate,
+              let reference = listing.reference else { libraryMessage = "먼저 업데이트를 확인하세요."; return }
+        isPreparingChange = true
+        defer { isPreparingChange = false }
+        var download: GitHubSkillDownload?
+        defer { download?.discard() }
+        do {
+            let fetched = try await gitHubSkills.download(candidate, from: listing)
+            download = fetched
+            var url = listing.repository.url.appendingPathComponent("tree").appendingPathComponent(reference)
+            for part in candidate.path.split(separator: "/") { url.appendPathComponent(String(part)) }
+            let remote = url, service = skillsCLIService
+            let plan = try await Task.detached(priority: .userInitiated) {
+                try service.prepareUpdate(folder: fetched.folder, installations: skill.installations, source: source, remoteSource: remote, executable: executable,
+                                          trackingReference: listing.trackingReference)
+            }.value
+            guard !Task.isCancelled else { return }
+            skillsCLIDownload = fetched; download = nil
+            skillsCLIFailed = false; skillsCLIOutput = nil; skillsCLIPreview = plan
+            libraryMessage = nil
+        } catch { libraryMessage = error.localizedDescription }
+    }
+
 
     var selectedAgentRequest: AgentChangeRequest? { agentRequests.first { $0.id == selectedAgentRequestID } }
     var filteredAgentRequests: [AgentChangeRequest] { agentRequests.filter { matchesSearch($0.title + " " + $0.id.uuidString) } }

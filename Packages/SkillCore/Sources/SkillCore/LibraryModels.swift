@@ -139,7 +139,7 @@ public enum LibraryCatalog {
             guard let location = roots.first(where: { $0.id == entry.rootID }) else { continue }
             installations.append(installation(entry: entry, location: location, roots: roots))
         }
-        for saved in disabled {
+        for saved in disabled where saved.isRemoved != true {
             if let link = saved.link {
                 guard saved.matchesCurrentItem else { continue }
                 let entry = SkillEntry(id: "stored-link:" + saved.id, rootID: saved.location.id, agent: saved.location.agent,

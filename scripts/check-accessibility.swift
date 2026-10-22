@@ -40,8 +40,8 @@ import SwiftUI
             guard depth < 24 else { return [] }
             return [root] + (value(root, "AXChildren") as? [AXUIElement] ?? []).flatMap { elements($0, depth: depth + 1) }
         }
-        func wait(_ message: String, _ predicate: () -> Bool) {
-            let deadline = Date().addingTimeInterval(5)
+        func wait(_ message: String, timeout: TimeInterval = 5, _ predicate: () -> Bool) {
+            let deadline = Date().addingTimeInterval(timeout)
             while Date() < deadline { if predicate() { return }; Thread.sleep(forTimeInterval: 0.05) }
             check(false, message)
         }
@@ -81,8 +81,10 @@ import SwiftUI
             Thread.sleep(forTimeInterval: 0.2)
         }
         wait("Fixture windows did not open") { elements(app).contains { string($0, "AXIdentifier") == "settings.page.general" } }
-        NSRunningApplication(processIdentifier: process.processIdentifier)!.activate(options: [.activateIgnoringOtherApps])
+        NSRunningApplication(processIdentifier: process.processIdentifier)!.activate()
         AXUIElementPerformAction(find("a11y.settings"), "AXRaise" as CFString)
+        _ = AXUIElementSetAttributeValue(find("a11y.settings"), "AXMain" as CFString, kCFBooleanTrue)
+        NSRunningApplication(processIdentifier: process.processIdentifier)!.activate()
         Thread.sleep(forTimeInterval: 0.3)
 
         selectPage("general")
@@ -128,6 +130,9 @@ import SwiftUI
 
         let library = find("a11y.library")
         check(AXUIElementPerformAction(library, "AXRaise" as CFString) == .success)
+        _ = AXUIElementSetAttributeValue(library, "AXMain" as CFString, kCFBooleanTrue)
+        NSRunningApplication(processIdentifier: process.processIdentifier)!.activate()
+        Thread.sleep(forTimeInterval: 0.3)
         let navigation = ["sidebar.skills", "sidebar.instructions", "sidebar.activity"]
         let navigationLabels = ["스킬 라이브러리", "전역 지침", "활동 이력"]
         let sidebarIDs = Set(elements(library).map { string($0, "AXIdentifier") }.filter { $0.hasPrefix("sidebar.") })
@@ -182,6 +187,63 @@ import SwiftUI
         func expectText(_ text: String) {
             wait("Missing section description: " + text) { elements(library).contains { string($0, "AXValue").contains(text) } }
         }
+        AXUIElementPerformAction(find("a11y.settings"), "AXRaise" as CFString)
+        selectPage("general")
+        selectMenu("settings.managementMethod", "skills CLI")
+        check(string(find("settings.managementMethod"), "AXValue").contains("skills CLI"), "Detected CLI must be selectable")
+        AXUIElementPerformAction(library, "AXRaise" as CFString)
+        _ = AXUIElementSetAttributeValue(library, "AXMain" as CFString, kCFBooleanTrue)
+        press("sidebar.skills", expecting: "workbench.skillSection")
+        try Data().write(to: home.appendingPathComponent("select.update"))
+        wait("Update fixture must select its skill") { FileManager.default.fileExists(atPath: home.appendingPathComponent("select.update.done").path) }
+        press("library.checkUpdates")
+        wait("Update count must appear") { elements(library).contains { string($0, "AXIdentifier") == "library.showUpdates" } }
+        wait("Available update badge must appear") { elements(library).contains { string($0, "AXIdentifier") == "library.reviewUpdate" } }
+        selectMenu("library.scope", "업데이트 있음 · 1")
+        check(elements(library).contains { string($0, "AXValue").contains("keyboard-demo") }, "Update filter must preserve the selected skill")
+        try Data().write(to: home.appendingPathComponent("capture.lifecycle"))
+        wait("Lifecycle UI screenshots were not captured") { FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.lifecycle.done").path) }
+        press("library.reviewUpdate")
+        wait("Update must open a CLI review") { elements(app).contains { string($0, "AXIdentifier") == "library.applyCLIChange" } }
+        check(elements(app).contains { string($0, "AXValue").contains("skills update는 에이전트 범위") }, "Update review must disclose scoped CLI reinstall")
+        key(53)
+        wait("Escape must cancel update") { !elements(app).contains { string($0, "AXRole") == "AXSheet" } }
+        press("library.removeSkill")
+        wait("CLI deletion review must open") { elements(app).contains { string($0, "AXIdentifier") == "library.applyCLIChange" } }
+        check(elements(app).contains { string($0, "AXValue").contains("현재 목록 밖의 동명 설치 포함") }, "Global CLI delete must disclose its full scope")
+        key(53)
+        wait("Escape must cancel CLI delete") { !elements(app).contains { string($0, "AXRole") == "AXSheet" } }
+        check(FileManager.default.fileExists(atPath: home.appendingPathComponent(".agents/skills/keyboard-demo/SKILL.md").path), "Cancelled CLI changes must preserve source")
+        selectMenu("library.scope", "전체 · 2")
+        focus(find("library.skillList"))
+        key(0, flags: .maskCommand)
+        wait("Command-A must select all visible skills") { ["AXDescription", "AXTitle"].contains { string(find("library.removeSelected"), $0).contains("2개") } }
+        press("library.removeSelected")
+        wait("Batch delete review must open") { elements(app).contains { string($0, "AXIdentifier") == "library.applyCLIChange" } }
+        check(elements(app).contains { string($0, "AXValue").contains("삭제할 스킬 · 2개") }, "Batch review must list its selected skill count")
+        check(elements(app).contains { string($0, "AXValue").contains("keyboard-demo") } && elements(app).contains { string($0, "AXValue").contains("voiceover-demo") }, "Batch review must name every selected skill")
+        try Data().write(to: home.appendingPathComponent("capture.batch"))
+        wait("Batch review screenshots were not captured") { FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.batch.done").path) }
+        key(53)
+        wait("Escape must cancel batch deletion") { !elements(app).contains { string($0, "AXRole") == "AXSheet" } }
+        check(FileManager.default.fileExists(atPath: home.appendingPathComponent(".agents/skills/keyboard-demo/SKILL.md").path), "Cancelled batch must preserve source")
+        press("library.install", expecting: "library.installAgent.codex")
+        check(elements(app).filter { string($0, "AXIdentifier").hasPrefix("library.installAgent.") }.count == 8, "CLI install must expose all eight agents as independent checkboxes")
+        check((value(find("library.installAgent.codex"), "AXValue") as? NSNumber)?.boolValue == true, "CLI install must preserve the initial Codex choice")
+        press("library.installAgent.claudeCode")
+        check((value(find("library.installAgent.codex"), "AXValue") as? NSNumber)?.boolValue == true && (value(find("library.installAgent.claudeCode"), "AXValue") as? NSNumber)?.boolValue == true, "CLI install must allow multiple agents")
+        check(string(find("library.installScope"), "AXValue").contains("-g"), "CLI global scope must be explicit")
+        _ = find("library.installRunner")
+        try Data().write(to: home.appendingPathComponent("capture.cli-install"))
+        wait("CLI install screenshots were not captured") { FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.cli-install.done").path) }
+        key(53)
+        wait("Escape must cancel CLI installation") { !elements(app).contains { string($0, "AXRole") == "AXSheet" } }
+        AXUIElementPerformAction(find("a11y.settings"), "AXRaise" as CFString)
+        try FileManager.default.removeItem(at: home.appendingPathComponent("bin/skills"))
+        press("settings.refreshSkillsCLI")
+        check(string(find("settings.managementMethod"), "AXValue").contains("skills CLI"), "CLI disappearance must preserve selection")
+        selectMenu("settings.managementMethod", "앱 직접 관리")
+        AXUIElementPerformAction(library, "AXRaise" as CFString)
         press("sidebar.activity", expecting: "workbench.activitySection")
         expectHeading("활동 이력")
         for (segment, description) in [("요청", "에이전트가 제안한 변경"), ("변경", "완료 기록 최근"), ("검사 이력", "로컬 검사 이력")] {
@@ -205,6 +267,7 @@ import SwiftUI
         expectText("로컬 검사 ·")
         selectSegment("workbench.skillSection", "스킬")
         _ = find("library.scope")
+        press("library.filters")
         press("library.agent")
         wait("Installed agent filter options did not open") { elements(app).contains { string($0, "AXRole") == "AXMenuItem" && string($0, "AXTitle") == "Codex" } }
         let agentOptions = elements(app).filter { string($0, "AXRole") == "AXMenuItem" }.map { string($0, "AXTitle") }
@@ -222,20 +285,59 @@ import SwiftUI
             string(find("library.group"), "AXValue").contains("모든 그룹") &&
             (value(find("library.clearFilters"), "AXEnabled") as? Bool) == false
         }
+        key(53)
+        press("library.install", expecting: "library.installRoot")
+        wait("Install action must open a native sheet") { elements(app).contains { string($0, "AXRole") == "AXSheet" } }
+        let checksGitHub = ProcessInfo.processInfo.environment["AHM_CHECK_GITHUB"] == "1"
+        if checksGitHub {
+            check(AXUIElementSetAttributeValue(find("library.githubURL"), "AXValue" as CFString,
+                "https://github.com/mattpocock/skills" as CFString) == .success, "Repository field must accept a GitHub URL")
+            press("library.loadGitHub")
+            var row: AXUIElement?
+            wait("GitHub skill list did not load", timeout: 20) {
+                row = elements(app).first { element in
+                    string(element, "AXRole") == "AXRow" && elements(element).contains { string($0, "AXValue") == "codebase-design" }
+                }
+                return row != nil
+            }
+            check(AXUIElementSetAttributeValue(row!, "AXSelected" as CFString, kCFBooleanTrue) == .success, "GitHub skill must be selectable")
+            wait("Selected GitHub skill must enable installation review") { (value(find("library.prepareInstall"), "AXEnabled") as? Bool) == true }
+        }
+        try Data().write(to: home.appendingPathComponent("capture.install"))
+        wait("Install sheet was not captured") { FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.install.done").path) }
+        if checksGitHub {
+            press("library.prepareInstall")
+            wait("GitHub install must reach the final review sheet", timeout: 20) {
+                elements(app).contains { string($0, "AXIdentifier") == "library.applyChange" }
+            }
+            check(elements(app).contains { string($0, "AXValue").contains("출처: https://github.com/mattpocock/skills") }, "Review must show the GitHub source")
+        }
+        key(53)
+        wait("Escape must cancel installation") { !elements(app).contains { string($0, "AXRole") == "AXSheet" } }
         try Data().write(to: home.appendingPathComponent("capture.layout"))
         wait("Workbench layout screenshots were not captured") { FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.layout.done").path) }
-        print("PASS: native AX agent names/states and actions; task-only sidebar Tab/Shift-Tab/Space; segmented skills/instructions/activity navigation; installed-agent and combined group filters/reset; group-sheet focus/Escape; full-window layout captures in /tmp/ahm-workbench-layout-*.png")
+        print("PASS: native AX agent names/states/actions; task navigation and filters; CLI management selection, available update/filter, scoped update and global deletion review/cancel; group/install focus/Escape; optional GitHub selection/download/review; light/dark lifecycle captures in /tmp/ahm-lifecycle-*.png")
         print("NOT CHECKED: spoken VoiceOver output and global all-controls Tab traversal; system settings unchanged")
     }
 
     @MainActor static func fixture(_ suite: String) throws {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
+        // Match the standard Edit menu supplied by the production SwiftUI App scene.
+        let menu = NSMenu(), edit = NSMenu(title: "Edit"), item = NSMenuItem()
+        item.submenu = edit; menu.addItem(item)
+        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        app.mainMenu = menu
         let home = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent().appendingPathComponent("home")
         for path in [".agents/skills/keyboard-demo", ".claude/skills/voiceover-demo"] {
             let folder = home.appendingPathComponent(path)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             try "---\nname: \(folder.lastPathComponent)\ndescription: Synthetic accessibility fixture\n---\nRead only test content.\n".write(to: folder.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        }
+        for path in [".claude/skills/keyboard-demo", ".grok/skills/keyboard-demo"] {
+            let link = home.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: home.appendingPathComponent(".agents/skills/keyboard-demo"))
         }
         let defaults = UserDefaults(suiteName: suite)!
         let bin = home.appendingPathComponent("bin")
@@ -245,8 +347,15 @@ import SwiftUI
             try Data("#!/bin/sh\nexit 99\n".utf8).write(to: executable)
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
         }
+        let skillsCLI = bin.appendingPathComponent("skills")
+        try "#!/bin/sh\necho 1.7.4\n".write(to: skillsCLI, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: skillsCLI.path)
+        let cliService = SkillsCLIService(home: home, environment: [:], detector: AgentInstallationDetector(executableDirectories: [bin], applicationDirectories: []))
         let store = AppStore(defaults: defaults, home: home,
-                             installationDetector: AgentInstallationDetector(executableDirectories: [bin], applicationDirectories: []), instructionEnvironment: [:])
+                             installationDetector: AgentInstallationDetector(executableDirectories: [bin], applicationDirectories: []), skillsCLIService: cliService,
+                             gitHubSkills: SkillUpdateFixture.service(), instructionEnvironment: [:])
+        let receipt = home.appendingPathComponent(".agents/.skill-lock.json")
+        try JSONSerialization.data(withJSONObject: ["version": 3, "skills": ["keyboard-demo": ["source": "fixture/keyboard", "sourceType": "github", "ref": "main", "skillPath": "skills/keyboard-demo/SKILL.md", "skillFolderHash": String(repeating: "0", count: 40)]]]).write(to: receipt)
         func window<V: View>(_ root: V, id: String, size: NSSize) -> NSWindow {
             let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: 80, y: 80), size: size), styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
@@ -268,7 +377,74 @@ import SwiftUI
                   store.saveGroup(SkillGroup(name: "Keyboard group", skillIDs: [skill.id])) else {
                 fputs("FAIL: Could not seed the isolated keyboard group\n", stderr); exit(1)
             }
+            store.selectedSkillID = skill.id
             while !FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.layout").path) {
+                if FileManager.default.fileExists(atPath: home.appendingPathComponent("select.update").path),
+                   !FileManager.default.fileExists(atPath: home.appendingPathComponent("select.update.done").path) {
+                    store.selectedSkillID = skill.id
+                    try? Data().write(to: home.appendingPathComponent("select.update.done"))
+                }
+                if FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.lifecycle").path),
+                   !FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.lifecycle.done").path) {
+                    for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
+                        for (window, prefix) in [(library, "library"), (settings, "settings")] {
+                            window.appearance = NSAppearance(named: appearance)
+                            window.contentView?.layoutSubtreeIfNeeded()
+                            try? await Task.sleep(for: .milliseconds(150))
+                            if let view = window.contentView, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                                view.cacheDisplay(in: view.bounds, to: bitmap)
+                                try? bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/ahm-lifecycle-\(prefix)-\(name).png"))
+                            }
+                        }
+                    }
+                    try? Data().write(to: home.appendingPathComponent("capture.lifecycle.done"))
+                }
+                if FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.batch").path),
+                   !FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.batch.done").path),
+                   let sheet = library.attachedSheet, let view = sheet.contentView {
+                    for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
+                        sheet.appearance = NSAppearance(named: appearance)
+                        view.layoutSubtreeIfNeeded()
+                        try? await Task.sleep(for: .milliseconds(150))
+                        if let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                            view.cacheDisplay(in: view.bounds, to: bitmap)
+                            try? bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/ahm-cli-batch-\(name).png"))
+                        }
+                    }
+                    try? Data().write(to: home.appendingPathComponent("capture.batch.done"))
+                }
+                if FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.cli-install").path),
+                   !FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.cli-install.done").path),
+                   let sheet = library.attachedSheet, let view = sheet.contentView {
+                    for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
+                        sheet.appearance = NSAppearance(named: appearance)
+                        view.layoutSubtreeIfNeeded()
+                        try? await Task.sleep(for: .milliseconds(150))
+                        if let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                            view.cacheDisplay(in: view.bounds, to: bitmap)
+                            try? bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/ahm-cli-install-\(name).png"))
+                        }
+                    }
+                    try? Data().write(to: home.appendingPathComponent("capture.cli-install.done"))
+                }
+                if FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.install").path),
+                   !FileManager.default.fileExists(atPath: home.appendingPathComponent("capture.install.done").path),
+                   let sheet = library.attachedSheet, let view = sheet.contentView {
+                    let output = URL(fileURLWithPath: "/tmp/ahm-skill-install.png")
+                    var captured = false
+                    if CGPreflightScreenCaptureAccess() {
+                        let capture = Process()
+                        capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                        capture.arguments = ["-x", "-o", "-l", String(sheet.windowNumber), output.path]
+                        do { try capture.run(); capture.waitUntilExit(); captured = capture.terminationStatus == 0 }
+                        catch { print("Sheet screenshot unavailable:", error.localizedDescription) }
+                    }
+                    if !captured, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                        view.cacheDisplay(in: view.bounds, to: bitmap)
+                        try? bitmap.representation(using: .png, properties: [:])?.write(to: output)
+                    }
+                    try? Data().write(to: home.appendingPathComponent("capture.install.done"))
+                }
                 try? await Task.sleep(for: .milliseconds(100))
             }
             store.selectedSkillID = store.filteredSkills.first?.id

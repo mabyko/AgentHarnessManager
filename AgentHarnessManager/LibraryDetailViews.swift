@@ -5,16 +5,19 @@ import SwiftUI
 struct LibrarySkillDetail: View {
     let skill: CanonicalSkill
     @Environment(AppStore.self) private var store
+    @Environment(\.openSettings) private var openSettings
     @State private var selectedInstallationID: String?
     @State private var editingSource: SkillEntry?
     @State private var document: String?
     @State private var readError: String?
+    @State private var showsDocument = false
     private var installation: SkillInstallation? { skill.installations.first { $0.id == selectedInstallationID } ?? skill.installations.first }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 header
+                updateSection
                 if skill.hasProblems {
                     detailSection("검사 결과") {
                         ForEach(skill.installations) { item in
@@ -43,7 +46,7 @@ struct LibrarySkillDetail: View {
                         }
                     }.disabled(store.groups.isEmpty || !store.metadataIsEditable)
                 }
-                detailSection("SKILL.md 원문") {
+                DisclosureGroup("SKILL.md 원문", isExpanded: $showsDocument) {
                     if skill.installations.count > 1 {
                         Picker("읽을 설치 위치", selection: Binding(get: { installation?.id }, set: { selectedInstallationID = $0 })) {
                             ForEach(skill.installations) { Text($0.location.label + " · " + URL(fileURLWithPath: $0.originalPath).lastPathComponent).tag(Optional($0.id)) }
@@ -81,19 +84,58 @@ struct LibrarySkillDetail: View {
                     Task { await store.prepareChange(title: skill.name, installations: skill.activationInstallations, enabled: enabled) }
                 })).toggleStyle(.switch).labelsHidden().disabled(!store.canChangeFiles || skill.activationInstallations.contains(where: isReadOnly))
             }
-            Text(skill.summary).foregroundStyle(.secondary).textSelection(.enabled)
-            if skill.installations.contains(where: \.isSymbolicLink) {
-                Text("전체 전환은 설치 링크만 바꾸며 공유 원본은 유지합니다. 에이전트별 링크는 아래 설치 위치에서 따로 전환할 수 있습니다.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            Text(skill.summary).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
             HStack {
                 let enabled = skill.installations.filter(\.isEnabled).count
                 Label(enabled == 0 ? "꺼짐" : enabled == skill.installations.count ? "켜짐" : "일부 켜짐", systemImage: enabled == 0 ? "minus.circle" : "checkmark.circle")
                 Spacer()
+                Button {
+                    Task { await store.prepareRemoval(store.managementMethod == .skillsCLI ? skill.installations : skill.activationInstallations,
+                                                      allAgents: store.managementMethod == .skillsCLI) }
+                } label: {
+                    Label(store.managementMethod == .skillsCLI ? "CLI로 삭제…" : skill.installations.contains(where: \.isSymbolicLink) ? "설치 링크 제거…" : "설치 제거…", systemImage: "trash")
+                }.disabled(!store.canChangeFiles || (store.managementMethod == .direct && skill.activationInstallations.contains(where: isReadOnly)))
+                    .accessibilityIdentifier("library.removeSkill")
+                    .help(store.managementMethod == .skillsCLI ? "CLI가 인식하는 모든 에이전트의 동명 설치와 공유 원본·설치 기록 삭제를 검토합니다."
+                          : skill.installations.contains(where: \.isSymbolicLink) ? "에이전트의 설치 링크를 제거하고 공유 원본은 유지합니다." : "이 스킬의 설치 제거를 검토합니다. 복구용 사본은 보관합니다.")
                 Button { store.toggleFavorite(skill.id) } label: {
                     Label(store.preferences.favorites.contains(skill.id) ? "즐겨찾기 해제" : "즐겨찾기", systemImage: store.preferences.favorites.contains(skill.id) ? "star.fill" : "star")
                 }.disabled(!store.metadataIsEditable)
             }.font(.callout)
+        }
+    }
+    private var updateSection: some View {
+        detailSection("업데이트") {
+            if store.managementMethod != .skillsCLI {
+                Text("설정 → 일반에서 skills CLI 관리를 선택하면 설치·삭제·업데이트를 같은 도구로 관리합니다.")
+                    .font(.callout).foregroundStyle(.secondary)
+                Button("관리 도구 설정…") { openSettings() }
+            } else {
+                if let check = store.updateChecks[skill.id] {
+                    Label(check.title, systemImage: check.symbol).font(.callout.weight(.medium))
+                        .foregroundStyle(check.status == .available ? WorkbenchTheme.accent : .secondary)
+                        .accessibilityIdentifier("library.updateStatus")
+                    Text(check.message).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    if let source = check.source {
+                        Text("기록된 출처: " + source.repository.name).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    }
+                    Text(check.checkedAt, format: .dateTime.month().day().hour().minute()).font(.caption2).foregroundStyle(.secondary)
+                    HStack {
+                        if check.status == .available || check.status == .modified {
+                            Button(check.status == .available ? "업데이트 검토…" : "원격 버전 복원 검토…") { Task { await store.prepareSkillUpdate(skill) } }
+                                .buttonStyle(.borderedProminent).disabled(!store.canChangeFiles || store.skillsCLIExecutable == nil)
+                                .accessibilityIdentifier("library.reviewUpdate")
+                        }
+                        Button("다시 확인") { Task { await store.checkSkillUpdates([skill]) } }.disabled(!store.canCheckUpdates)
+                    }
+                } else {
+                    Text("아직 확인하지 않았습니다. 파일과 설치 기록을 바꾸지 않고 공개 GitHub 출처의 포함 파일을 비교합니다.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Button("이 스킬 업데이트 확인") { Task { await store.checkSkillUpdates([skill]) } }
+                        .disabled(!store.canCheckUpdates).accessibilityIdentifier("library.checkSkillUpdate")
+                }
+                if store.isCheckingUpdates { ProgressView("업데이트 확인 중…").controlSize(.small) }
+            }
         }
     }
     private func isReadOnly(_ item: SkillInstallation) -> Bool {
@@ -104,40 +146,50 @@ struct LibrarySkillDetail: View {
     }
     private func locationCard(_ item: SkillInstallation) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label(item.location.label + (item.isSymbolicLink ? " · 설치 링크" : skill.installations.contains(where: \.isSymbolicLink) ? " · 공유 원본" : ""), systemImage: item.isSymbolicLink ? "link" : "folder")
-                Spacer()
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: item.isSymbolicLink ? "link" : "folder").foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(store.agents(for: item.location).map(\.displayName).joined(separator: ", "))
+                        .font(.callout.weight(.medium))
+                    Text(item.isSymbolicLink ? "설치 링크" : skill.installations.contains(where: \.isSymbolicLink) ? "공유 원본" : "설치 폴더")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
                 Toggle(item.isEnabled ? "켜짐" : "꺼짐", isOn: Binding(get: { item.isEnabled }, set: { enabled in
                     Task { await store.prepareChange(title: item.name + " · " + item.location.label, installations: [item], enabled: enabled) }
                 })).toggleStyle(.switch).controlSize(.small).disabled(!store.canChangeFiles || isReadOnly(item))
                     .accessibilityLabel("\(item.location.label), \(item.originalPath), 켜기")
-                    .help(readOnlyReason(item) ?? (item.isSymbolicLink ? "원본을 유지하고 이 설치 링크만 전환합니다." : "이 설치 폴더를 전환합니다."))
-            }.font(.callout.weight(.medium))
-            Text(item.currentPath).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-            if store.agents(for: item.location).count > 1 {
-                Text("호환 에이전트: " + store.agents(for: item.location).map(\.displayName).joined(separator: ", ") + " · 이 위치를 전환하면 함께 영향을 받습니다.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .help(readOnlyReason(item) ?? "이 설치 위치의 사용 상태를 바꿉니다.")
             }
-            if !item.isEnabled { Text("복원 위치: " + item.originalPath).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
-            if let target = item.resolvedPath {
-                Text((item.disabledRecord?.link == nil ? "공유 원본: " : "원래 위치 기준 원본: ") + target).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            if let reason = readOnlyReason(item) {
+                Label((store.managementMethod == .skillsCLI ? "켜기·끄기: " : "") + reason, systemImage: "lock").font(.caption).foregroundStyle(.secondary)
             }
-            if let link = item.disabledRecord?.link, !link.text.hasPrefix("/") {
-                Label("상대 링크는 보관 위치에서 직접 열지 말고 위 원본 경로와 앱의 원문 보기를 사용하세요.", systemImage: "info.circle")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            HStack {
-                Button("경로 복사") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(item.currentPath, forType: .string) }
-                Button("Finder에서 보기") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: item.currentPath)]) }
+            DisclosureGroup("경로 및 출처") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(item.currentPath).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    if !item.isEnabled { Text("복원 위치: " + item.originalPath).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
+                    if let target = item.resolvedPath {
+                        Text("공유 원본: " + target).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    }
+                    if let link = item.disabledRecord?.link, !link.text.hasPrefix("/") {
+                        Label("보관 중인 상대 링크는 위 원본 경로나 앱의 원문 보기로 확인하세요.", systemImage: "info.circle")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Button("경로 복사") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(item.currentPath, forType: .string) }
+                        Button("Finder에서 보기") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: item.currentPath)]) }
+                    }.font(.caption)
+                    HStack {
+                        Text(store.sourceRepository(for: item)?.name ?? "출처 미확인").font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("출처 연결…") { editingSource = item.entry }
+                            .font(.caption).disabled(!item.isEnabled || store.isScanning || store.sourcesLoadFailed)
+                    }
+                    Button(store.managementMethod == .skillsCLI ? "이 설치 CLI로 삭제…" : "이 설치 제거…", role: .destructive) { Task { await store.prepareRemoval([item]) } }
+                        .font(.caption).disabled(!store.canChangeFiles || (store.managementMethod == .direct && isReadOnly(item)))
+                        .accessibilityLabel("\(item.location.label), \(item.originalPath), 설치 제거")
+                }.padding(.top, 8)
             }.font(.caption)
-            HStack {
-                Text(store.sourceRepository(for: item)?.name ?? "출처 미확인").font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("출처 연결…") { editingSource = item.entry }
-                    .font(.caption).disabled(!item.isEnabled || store.isScanning || store.sourcesLoadFailed)
-            }
-            Text(readOnlyReason(item) ?? (item.isSymbolicLink ? "이 에이전트의 설치 링크만 보관·복원합니다. 원본과 다른 에이전트의 직접 링크는 유지합니다." : "파일 상태이며 에이전트의 현재 대화에 반영됐는지는 확인하지 않습니다."))
-                .font(.caption).foregroundStyle(.secondary)
         }.padding(14).background(WorkbenchTheme.raised, in: RoundedRectangle(cornerRadius: 8))
     }
 }
@@ -312,9 +364,10 @@ private struct MutationMoveCard: View {
     @Environment(AppStore.self) private var store
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(move.installation.name + " · " + (move.enabled ? "원래 위치로 복원" : "발견 경로 밖에 보관"),
+            Label(move.installation.name + " · " + (move.removesFromLibrary ? "설치 제거 · 복구용 보관" : move.operation == .install ? "설치" : move.operation == .unhide ? "라이브러리로 복원" : move.enabled ? "원래 위치로 복원" : "발견 경로 밖에 보관"),
                   systemImage: move.enabled ? "arrow.uturn.backward" : "archivebox").font(.callout.weight(.medium))
             Text(move.installation.location.label).font(.caption).foregroundStyle(.secondary)
+            if let repository = move.sourceRepository { Text("출처: " + repository).font(.caption).textSelection(.enabled) }
             if store.agents(for: move.installation.location).count > 1 {
                 Text("공유 경로 영향: " + store.agents(for: move.installation.location).map(\.displayName).joined(separator: ", "))
                     .font(.caption).foregroundStyle(WorkbenchTheme.warning)
@@ -324,7 +377,7 @@ private struct MutationMoveCard: View {
                 Text("원본: " + link.targetPath + "\n링크 문자: " + link.text)
                     .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
             }
-            Text(move.source + "\n→ " + move.destination).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+            Text(move.changesLocation ? move.source + "\n→ " + move.destination : "보관 위치 유지: " + move.destination).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
             HStack {
                 Button("경로 복사") {
                     NSPasteboard.general.clearContents()
@@ -345,7 +398,10 @@ struct MutationPreview: View {
         VStack(alignment: .leading, spacing: 16) {
             Text(plan.undoes == nil ? "변경 검토" : "되돌리기 검토").font(.title2.weight(.semibold))
             Text(plan.title)
-            Text("켜기 \(plan.installations.filter(\.enabled).count) · 끄기 \(plan.installations.filter { !$0.enabled }.count)").font(.callout).foregroundStyle(.secondary)
+            Text(plan.installations.contains { $0.operation != nil }
+                 ? "\(plan.installations.count)개 설치 위치 · 복구용 사본과 변경 이력 보관"
+                 : "켜기 \(plan.installations.filter(\.enabled).count) · 끄기 \(plan.installations.filter { !$0.enabled }.count)")
+                .font(.callout).foregroundStyle(.secondary)
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if let selection = plan.groupSelection { GroupSelectionSummary(change: selection) }
@@ -357,7 +413,14 @@ struct MutationPreview: View {
                 if store.isMutating { ProgressView().controlSize(.small); Text("적용 중…").font(.caption) }
                 Spacer()
                 Button("취소") { store.cancelPreview() }.keyboardShortcut(.cancelAction).disabled(store.isMutating)
-                Button(plan.undoes == nil ? "적용" : "되돌리기 적용") { Task { await store.applyPreview() } }.keyboardShortcut(.defaultAction).disabled(store.isMutating)
+                if plan.installations.contains(where: \.removesFromLibrary) {
+                    Button("설치 제거", role: .destructive) { Task { await store.applyPreview() } }
+                        .disabled(store.isMutating).accessibilityIdentifier("library.applyChange")
+                } else {
+                    Button(plan.undoes != nil ? "되돌리기 적용" : plan.installations.contains { $0.operation == .install } ? "설치" : "적용") {
+                        Task { await store.applyPreview() }
+                    }.keyboardShortcut(.defaultAction).disabled(store.isMutating).accessibilityIdentifier("library.applyChange")
+                }
             }
         }.padding(24).frame(width: 620)
         .interactiveDismissDisabled(store.isMutating)
@@ -368,5 +431,262 @@ private func detailSection<Content: View>(_ title: String, @ViewBuilder content:
     VStack(alignment: .leading, spacing: 12) {
         Text(title).font(.headline)
         content()
+    }
+}
+
+struct SkillInstallSheet: View {
+    private enum Origin: String, CaseIterable { case github = "GitHub", local = "로컬 폴더" }
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    @State private var origin = Origin.github
+    @State private var source: URL?
+    @State private var rootID: String?
+    @State private var repositoryInput = ""
+    @State private var listing: GitHubSkillListing?
+    @State private var candidateID: String?
+    @State private var busy = false
+    @State private var message: String?
+    @State private var request: Task<Void, Never>?
+    @State private var cliAgents: Set<SkillAgent> = [.codex]
+    let onPrepared: (MutationPlan) -> Void
+    let onCLIPrepared: (SkillsCLIPlan, GitHubSkillDownload?) -> Void
+    private var root: DiscoveryRoot? { store.automaticRoots.first { $0.id == rootID } }
+    private var candidate: GitHubSkillCandidate? { listing?.skills.first { $0.id == candidateID } }
+    private var canPrepare: Bool {
+        (store.managementMethod == .direct ? root != nil : store.skillsCLIExecutable != nil && !cliAgents.isEmpty)
+            && (origin == .local ? source != nil : candidate != nil) && !busy && !store.isPreparingChange
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("스킬 설치").font(.title2.weight(.semibold))
+            Picker("설치 원본", selection: $origin) {
+                ForEach(Origin.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }.pickerStyle(.segmented).disabled(busy || store.isPreparingChange)
+            if origin == .github { githubInput }
+            else { localInput }
+            Divider()
+            HStack {
+                Label(store.managementMethod.title, systemImage: store.managementMethod == .skillsCLI ? "terminal" : "folder")
+                    .font(.callout.weight(.medium)).accessibilityIdentifier("library.managementMethod")
+                Spacer()
+                Text("관리 도구 · 설정 → 일반에서 변경").font(.caption).foregroundStyle(.secondary)
+            }
+            if store.managementMethod == .skillsCLI {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("설치할 에이전트").font(.callout.weight(.medium))
+                        Spacer()
+                        Text("사용자 전역 · -g").font(.caption).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("library.installScope")
+                    }
+                    LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], alignment: .leading, spacing: 10) {
+                        ForEach(SkillAgent.allCases.filter { $0 != .custom }, id: \.self) { agent in
+                            Toggle(agent.displayName, isOn: Binding(get: { cliAgents.contains(agent) }, set: { selected in
+                                if selected { cliAgents.insert(agent) } else { cliAgents.remove(agent) }
+                            })).toggleStyle(.checkbox).accessibilityIdentifier("library.installAgent." + agent.rawValue)
+                        }
+                    }.disabled(busy || store.isPreparingChange)
+                    if let executable = store.skillsCLIExecutable {
+                        Text(executable.lastPathComponent == "bunx" ? "bunx skills" : executable.lastPathComponent == "npx" ? "npx --yes skills" : "skills")
+                            .font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("library.installRunner")
+                    }
+                    Text("선택한 에이전트에 CLI로 설치합니다. 다음 단계에서 실행 명령과 설치 경로를 확인하세요.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if store.skillsCLIExecutable == nil {
+                    Label("skills CLI를 찾을 수 없습니다. 설정에서 다시 확인하거나 실행 파일을 선택하세요.", systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(WorkbenchTheme.warning)
+                }
+            } else {
+                Picker("설치 위치", selection: $rootID) {
+                    Text("위치 선택").tag(String?.none)
+                    ForEach(store.automaticRoots) { Text($0.label).tag(Optional($0.id)) }
+                }.accessibilityIdentifier("library.installRoot").disabled(busy || store.isPreparingChange)
+                if let root {
+                    Text(root.url.path).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).textSelection(.enabled)
+                    Text("이 경로를 함께 사용하는 에이전트: " + store.agents(for: root).map(\.displayName).joined(separator: ", "))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if let message = message ?? store.libraryMessage {
+                Label(message, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(WorkbenchTheme.warning)
+            }
+            Text("다음 단계에서 설치 경로와 출처를 검토합니다. 기존 설치를 덮어쓰지 않으며 스킬의 명령을 실행하지 않습니다.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack {
+                if busy || store.isPreparingChange { ProgressView().controlSize(.small); Text("파일 확인 중…").font(.caption).foregroundStyle(.secondary) }
+                Spacer()
+                Button("취소") { request?.cancel(); dismiss() }.keyboardShortcut(.cancelAction).disabled(store.isPreparingChange)
+                Button("설치 검토…") { prepare() }
+                    .buttonStyle(.borderedProminent).disabled(!canPrepare)
+                    .accessibilityIdentifier("library.prepareInstall")
+            }
+        }.padding(24).frame(width: 580)
+        .interactiveDismissDisabled(busy || store.isPreparingChange)
+        .tint(WorkbenchTheme.accent)
+        .onAppear {
+            store.libraryMessage = nil
+            rootID = store.automaticRoots.first { $0.agent == store.agentFilter }?.id ?? store.automaticRoots.first?.id
+            cliAgents = [store.agentFilter == .custom ? .codex : store.agentFilter ?? .codex]
+        }
+        .onDisappear { request?.cancel() }
+        .onChange(of: repositoryInput) { _, _ in listing = nil; candidateID = nil; message = nil }
+        .onChange(of: origin) { _, _ in message = nil; store.libraryMessage = nil }
+    }
+
+    private var githubInput: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("공개 GitHub 저장소").font(.callout.weight(.medium))
+            HStack {
+                TextField("owner/repo 또는 https://github.com/owner/repo", text: $repositoryInput)
+                    .textFieldStyle(.roundedBorder).disabled(busy || store.isPreparingChange)
+                    .accessibilityIdentifier("library.githubURL")
+                    .onSubmit { if !busy { loadRepository() } }
+                Button("불러오기") { loadRepository() }
+                    .disabled(repositoryInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || busy || store.isPreparingChange)
+                    .accessibilityIdentifier("library.loadGitHub")
+            }
+            if let listing {
+                Text("설치할 스킬 선택 · \(listing.skills.count)개").font(.caption).foregroundStyle(.secondary)
+                List(selection: $candidateID) {
+                    ForEach(listing.skills) { skill in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(skill.name).fontWeight(.medium)
+                            Text(skill.path.isEmpty ? "저장소 루트" : skill.path).font(.caption).foregroundStyle(.secondary)
+                        }.tag(skill.id)
+                    }
+                }.frame(height: 150).disabled(busy || store.isPreparingChange)
+                    .accessibilityIdentifier("library.githubSkills")
+            } else {
+                Text("저장소 주소를 입력하면 SKILL.md가 있는 폴더를 찾습니다. 비공개 저장소는 내려받은 로컬 폴더를 사용하세요.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var localInput: some View {
+        GroupBox {
+            HStack {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(source?.lastPathComponent ?? "SKILL.md가 들어 있는 폴더를 선택하세요").fontWeight(.medium)
+                    if let source { Text(source.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
+                }
+                Spacer()
+                Button("폴더 선택…") {
+                    let panel = NSOpenPanel()
+                    panel.canChooseFiles = false; panel.canChooseDirectories = true; panel.allowsMultipleSelection = false
+                    panel.message = "설치할 스킬의 SKILL.md가 바로 들어 있는 폴더를 선택하세요."
+                    if panel.runModal() == .OK { source = panel.url }
+                }.disabled(busy || store.isPreparingChange)
+            }.padding(8)
+        }
+    }
+
+    private func loadRepository() {
+        guard !repositoryInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        busy = true; message = nil; store.libraryMessage = nil; listing = nil; candidateID = nil
+        let input = repositoryInput
+        request = Task {
+            do {
+                let result = try await GitHubSkillService().list(repository: input)
+                guard !Task.isCancelled else { return }
+                listing = result
+                candidateID = result.skills.count == 1 ? result.skills.first?.id : nil
+            } catch { if !Task.isCancelled { message = error.localizedDescription } }
+            if !Task.isCancelled { busy = false }
+        }
+    }
+
+    private func prepare() {
+        guard canPrepare else { return }
+        let method = store.managementMethod, root = root, agents = Array(cliAgents)
+        busy = true; message = nil; store.libraryMessage = nil
+        request = Task {
+            var download: GitHubSkillDownload?
+            defer { download?.discard() }
+            do {
+                let folder: URL
+                var remoteSource: URL?
+                if origin == .github, let listing, let candidate {
+                    let result = try await GitHubSkillService().download(candidate, from: listing)
+                    download = result; folder = result.folder
+                    if method == .skillsCLI {
+                        guard let reference = listing.reference else { throw CatalogReadError.inaccessible("GitHub 버전을 다시 불러오세요.") }
+                        var url = listing.repository.url.appendingPathComponent("tree").appendingPathComponent(reference)
+                        for part in candidate.path.split(separator: "/") { url.appendPathComponent(String(part)) }
+                        remoteSource = url
+                    }
+                } else if let source { folder = source }
+                else { busy = false; return }
+                try Task.checkCancellation()
+                guard store.managementMethod == method else { throw CatalogReadError.inaccessible("관리 도구가 바뀌었습니다. 다시 검토하세요.") }
+                if method == .skillsCLI {
+                    if let plan = await store.prepareSkillsCLIInstallation(source: folder, agents: agents, remoteSource: remoteSource) {
+                        guard !Task.isCancelled else { return }
+                        onCLIPrepared(plan, download)
+                        download = nil
+                        dismiss()
+                    }
+                } else if let root, let plan = await store.prepareInstallation(source: folder, root: root, repository: origin == .github ? listing?.repository : nil) {
+                    guard !Task.isCancelled else { LibraryService.discardInstallation(plan); return }
+                    onPrepared(plan)
+                    dismiss()
+                }
+            } catch { if !Task.isCancelled { message = error.localizedDescription } }
+            if !Task.isCancelled { busy = false }
+        }
+    }
+}
+
+struct SkillsCLIReview: View {
+    let plan: SkillsCLIPlan
+    @Environment(AppStore.self) private var store
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("skills CLI " + plan.operation.title + " 검토").font(.title2.weight(.semibold))
+            Text(plan.name).font(.headline)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    if plan.removalNames.count > 1 {
+                        Text("삭제할 스킬 · \(plan.removalNames.count)개").font(.headline)
+                        ForEach(plan.removalNames, id: \.self) { Text($0).font(.callout) }
+                    }
+                    Text("실행할 명령").font(.headline)
+                    Text(plan.command).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    if let commit = plan.reviewedCommit {
+                        Text("검토한 버전: " + commit).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    }
+                    if !plan.scopeNote.isEmpty { Text(plan.scopeNote).font(.callout) }
+                    Text("영향을 확인할 경로").font(.headline)
+                    ForEach(plan.checkedPaths, id: \.self) { Text($0).font(.system(.caption, design: .monospaced)).textSelection(.enabled) }
+                    Text(plan.operation == .install
+                         ? "CLI가 설치 파일과 설치 기록을 관리합니다. 기존 설치를 덮어쓰지 않습니다. 앱 변경 이력의 자동 되돌리기를 제공하지 않으며 CLI 실패 시 일부 변경이 남을 수 있습니다."
+                         : "실행 직전 설치 파일과 기록을 다시 확인합니다. CLI 실패 시 일부 변경이 남을 수 있으며 자동으로 재실행하지 않습니다.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    if store.skillsCLIFailed, let message = store.libraryMessage {
+                        Label(message, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(WorkbenchTheme.warning)
+                    }
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }.frame(maxHeight: 320)
+            HStack {
+                if store.isMutating { ProgressView().controlSize(.small); Text("skills CLI 실행 중…").font(.caption) }
+                Spacer()
+                Button(store.skillsCLIFailed ? "닫기" : "취소") { store.cancelSkillsCLIChange() }
+                    .keyboardShortcut(.cancelAction).disabled(store.isMutating)
+                if plan.operation == .remove {
+                    Button("CLI로 영구 삭제", role: .destructive) { Task { await store.applySkillsCLIChange() } }
+                        .buttonStyle(.borderedProminent).disabled(store.isMutating || store.skillsCLIFailed)
+                        .accessibilityIdentifier("library.applyCLIChange")
+                } else {
+                    Button("CLI로 " + plan.operation.title) { Task { await store.applySkillsCLIChange() } }
+                        .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                        .disabled(store.isMutating || store.skillsCLIFailed)
+                        .accessibilityIdentifier("library.applyCLIChange")
+                }
+            }
+        }.padding(24).frame(width: 620).tint(WorkbenchTheme.accent)
+        .interactiveDismissDisabled(store.isMutating)
     }
 }
